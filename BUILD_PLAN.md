@@ -40,7 +40,7 @@ Minor* (flute + piano, three staves).
 ### Known limitations
 
 - Photo OMR requires the local Python + Docker backend. The public GitHub Pages
-  build supports samples and MusicXML uploads only.
+  build supports samples, MusicXML, and MIDI uploads only.
 - The blank staff is a single treble staff, monophonic for click/keyboard input.
   Chords, multiple staves, and advanced notation use the raw MusicXML editor.
 - Kodály syllables are a per-note v1 mapping (`ta`, `ti`, `ka`, `ta-a`, `ta-i`);

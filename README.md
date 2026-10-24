@@ -10,8 +10,8 @@ result with **OpenSheetMusicDisplay**, and plays it back with the Web Audio API.
 
 <https://rayfoolshs.github.io/sightreading-rhythm-assistant/>
 
-The Pages build supports the built-in examples, MusicXML uploads, playback, the
-Kodály/counting toggles and the editor. **Photo/PDF OMR needs the local Python +
+The Pages build supports the built-in examples, MusicXML and MIDI uploads,
+playback, the Kodály/counting toggles and the editor. **Photo/PDF OMR needs the local Python +
 Docker backend**; the hosted build shows an in-app note explaining that.
 
 See [BUILD_PLAN.md](BUILD_PLAN.md) for status, release checks, and post-1.0 work.
