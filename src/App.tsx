@@ -9,6 +9,7 @@ import { ScoreView, type ScoreViewHandle } from './components/ScoreView'
 import { AudioEngine } from './music/audio'
 import { describePosition } from './music/counting'
 import { demoPieces } from './music/demo'
+import { midiToMusicXml } from './music/midiImport'
 import {
   findEditableNote,
   naturalizeNote,
@@ -1041,6 +1042,15 @@ function App() {
       const lower = file.name.toLowerCase()
       let statusTimer: number | null = null
       try {
+        if (lower.endsWith('.mid') || lower.endsWith('.midi')) {
+          const buffer = await file.arrayBuffer()
+          const result = midiToMusicXml(
+            buffer,
+            file.name.replace(/\.[^.]+$/, ''),
+          )
+          loadScore(result.xml, result.title)
+          return
+        }
         if (omrAvailable === false && !lower.endsWith('.xml') && !lower.endsWith('.musicxml')) {
           throw new Error(
             'Photo/scanned recognition needs the local Audiveris server. This hosted demo supports the built-in examples and MusicXML uploads. Run the project locally for photo OMR.',

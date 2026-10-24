@@ -1,7 +1,7 @@
 {
   "name": "sightreading-rhythm-assistant",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "server:setup": "python3 -m venv .venv && .venv/bin/pip install -r server/requirements.txt"
   },
   "dependencies": {
+    "@tonejs/midi": "^2.0.28",
     "opensheetmusicdisplay": "^2.2.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

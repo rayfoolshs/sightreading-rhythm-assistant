@@ -19,6 +19,9 @@ See [BUILD_PLAN.md](BUILD_PLAN.md) for status, release checks, and post-1.0 work
 ## What it does
 
 - **Photo to score** — upload JPG/PNG/HEIC/WebP/TIFF/PDF or drag it onto the page.
+- **MIDI import** — import `.mid`/`.midi` files; tracks become parts/staves,
+  wide piano tracks are split into upper/lower staves, and timing is quantized
+  to a 16th-note grid.
 - **Scrolling playhead** — a coral line glides through the notation and the score
   auto-scrolls to follow it.
 - **Metronome** — accented clicks on the first beat (and on the dotted-quarter
@@ -80,6 +83,13 @@ npm run server
 4. Start slow, then nudge the tempo slider up.
 5. Toggle **Kodály** above the score to switch the under-note labels from numbers
    to Kodály rhythm syllables.
+
+### Importing MIDI
+
+Choose or drop a `.mid`/`.midi` file. Each pitched track becomes a part/staff
+(drum tracks are skipped). A wide single track is split into upper and lower
+staves. Notes are quantized to 16th notes; very complex timing/triplets may need
+cleanup in the editor or a MusicXML export from MuseScore.
 
 Shortcuts: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> nudge one
 quarter note · <kbd>Home</kbd> restart. In the editor, <kbd>Delete</kbd> or <kbd>⌫</kbd> removes

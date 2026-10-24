@@ -71,7 +71,7 @@ export function LoadPanel({
         <input
           ref={inputRef}
           type="file"
-          accept="image/*,application/pdf,.xml,.musicxml"
+          accept="image/*,application/pdf,.xml,.musicxml,.mid,.midi"
           hidden
           onChange={(event) => {
             handleFiles(event.target.files)
@@ -93,8 +93,8 @@ export function LoadPanel({
           {busy
             ? 'Audiveris is converting it to MusicXML. This can take a minute.'
             : omrAvailable === false
-              ? 'Hosted demo: MusicXML uploads work here. Photo/PDF OMR needs the local Audiveris server.'
-              : 'JPG, PNG, HEIC, PDF, .xml or .musicxml · drag and drop or click'}
+              ? 'Hosted demo: MusicXML and MIDI uploads work here. Photo/PDF OMR needs the local Audiveris server.'
+              : 'JPG, PNG, HEIC, PDF, MusicXML or MIDI · drag and drop or click'}
         </div>
         {!busy && <span className="dropzone-action">Choose a file</span>}
         {busy && <span className="spinner dropzone-spinner" />}
@@ -102,8 +102,8 @@ export function LoadPanel({
 
       {omrAvailable === false && (
         <div className="hosted-note">
-          Photo recognition is offline in this hosted build. Use a sample or
-          upload a MusicXML file. Run the app locally for Audiveris OMR.
+          Photo recognition is offline in this hosted build. Use a sample, MusicXML,
+          or MIDI file. Run the app locally for Audiveris OMR.
         </div>
       )}
 

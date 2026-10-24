@@ -8,7 +8,7 @@ Kodály syllables, and a notation editor.
 
 ## Current status
 
-**Feature-complete for v1.0.** The app builds, lints, and runs locally with the
+**Feature-complete for v1.1.** The app builds, lints, and runs locally with the
 OMR server. The default example is the user-provided *Prelude in G Harmonic
 Minor* (flute + piano, three staves).
 
@@ -30,6 +30,8 @@ Minor* (flute + piano, three staves).
 - Arrow-key auditioning: ←/→ walk notes and play them; ↑/↓ transpose and play;
   Shift+arrow editing.
 - Default prelude on load, built-in 4/4 and 6/8 samples, blank staff.
+- MIDI import (`.mid`/`.midi`): 16th-note quantization, one part per pitched track,
+  upper/lower split for wide piano tracks, key/tempo/time-signature extraction.
 - Branding/credit: Ray Foo · rayfooproductions.com.
 - GitHub Pages publication from a static `gh-pages` branch (OMR disabled in the
   hosted build with a clear in-app notice).
@@ -46,6 +48,8 @@ Minor* (flute + piano, three staves).
 - Time signatures on existing scores are validated for note overflow but do not
   automatically reflow notes; blank-staff changes regenerate the page.
 - Repeats/D.C. are ignored in the playback timeline.
+- MIDI import is basic: triplets/swing are quantized to 16ths, chords at an onset
+  share a duration, and complex polyphony may need cleanup.
 - No automated test suite yet; validation is via build/lint plus manual browser
   smoke tests.
 
@@ -58,6 +62,7 @@ Minor* (flute + piano, three staves).
 - [x] Kodály toggle
 - [x] Editor/keyboard/delete/range flows
 - [x] OMR health/end-to-end round trip
+- [x] MIDI import tested with melody, duet, and wide piano tracks
 - [x] GitHub Pages build configured with repo base path
 - [x] Hosted-build OMR fallback message
 - [ ] Commit latest source and push `main`
@@ -72,7 +77,7 @@ Minor* (flute + piano, three staves).
 1. Hosted OMR option (cloud OCR or a self-hosted backend) for the public demo.
 2. Full chord-aware editor, drag-to-select ranges, drag-to-move notes.
 3. Kodály beam-group spellings and compound-meter refinements.
-4. Automated Playwright tests for OMR, counting, editor, and Pages.
+4. Automated Playwright tests for OMR, MIDI, counting, editor, and Pages.
 5. PDF multi-page import, repeats/D.C., count-in bar, section looping.
 6. Persist practice history and custom exercises.
 
