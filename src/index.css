@@ -1,0 +1,83 @@
+:root {
+  --paper: #fffdf7;
+  --paper-strong: #ffffff;
+  --cream: #f4efe4;
+  --cream-deep: #eae3d3;
+  --ink: #1d2823;
+  --ink-soft: #47524c;
+  --muted: #7a807a;
+  --line: #e4ddce;
+  --green: #245b4b;
+  --green-deep: #153b31;
+  --green-soft: #dfeae4;
+  --coral: #e05a3a;
+  --coral-soft: #f8e2da;
+  --amber: #d9a441;
+  --shadow-soft: 0 18px 40px -28px rgba(38, 47, 42, 0.4);
+  --shadow-card:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 20px 50px -34px rgba(38, 47, 42, 0.45);
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --sans: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --mono: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+
+  color: var(--ink);
+  background-color: var(--cream);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1100px 600px at 8% -8%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(900px 700px at 100% 0%, rgba(224, 200, 156, 0.25), transparent 55%),
+    var(--cream);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+[role='button']:focus-visible {
+  outline: 3px solid rgba(36, 91, 75, 0.35);
+  outline-offset: 3px;
+}
+
+svg {
+  display: block;
+}
