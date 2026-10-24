@@ -277,6 +277,23 @@ beat.
 - Deduplicate labels by onset.
 - Highlight the last label whose onset is ≤ the current play position.
 
+### Kodály syllables
+
+Add a **Kodály** toggle in the score toolbar (both normal and edit mode). When
+on, replace the numeric under-note labels with Kodály rhythm syllables; when off,
+restore the numbers. Build a separate per-onset label list using `durationQ`:
+
+- whole → `ta-a-a-a`, dotted half → `ta-a-a`, half → `ta-a`
+- dotted quarter → `ta-i`, quarter → `ta`
+- dotted eighth → `tim`, eighth → `ti`
+- sixteenths → alternate `ti` / `ka` by position within the pulse, so four
+  sixteenths read `ti ka ti ka`
+- label at the same x/y as the numeric labels (under the notehead, below the
+  beams), with the same active-note highlighting.
+
+The big live count card can stay numeric. Rebuild the labels when the toggle
+changes without reloading OSMD.
+
 ### Live count card
 
 A large card below the score shows:
@@ -401,7 +418,129 @@ Keyboard:
 
 ---
 
-## 9. Reliability / edge cases
+## 9. Writing your own notes
+
+Add a **Blank staff** option and a click-to-write workflow.
+
+### Blank staff
+
+- Add a **Blank staff** sample/action in the load panel: an empty 8-bar, 4/4
+  treble staff.
+- Add a **Clear staff** button in edit mode. On a normal score it starts a fresh
+  blank page (confirm first); on a blank page it clears the notes but keeps the
+  current meter.
+- Generate blank MusicXML with `divisions = 8`, one part/staff treble clef, and
+  quarter-note rests or written notes.
+- **Empty measures must use hidden layout anchors.** OSMD collapses consecutive
+  rest-only measures after the second measure. Put `print-object="no"` notes on
+  each beat of an otherwise empty measure (e.g. 4 hidden quarter notes in 4/4)
+  so every measure gets a real width and position. Hide them visually and:
+  - Skip notes with `sourceNote.PrintObject === false` in analysis/audio/note
+    heads.
+  - Skip `print-object="no"` notes in `parseEditableNotes`.
+  - Set `cursor.SkipInvisibleNotes = false` before the analysis cursor walk so
+    hidden beats still contribute visual positions.
+- Normalize blank MusicXML after every blank-mode edit: re-parse the visible
+  notes and regenerate the XML, which re-adds hidden anchors to now-empty
+  measures.
+
+### Click to write
+
+- Add an input overlay over the score canvas only in blank-staff edit mode.
+  Existing notehead hit targets sit above it and still select notes; rest hit
+  targets are hidden in input mode.
+- Expose per-measure layout from analysis:
+  - measure x/width from OSMD graphical measure bounding boxes;
+  - staff top/bottom from `ParentStaffLine.StaffLines` (remember to add the
+    measure's absolute y; the line y values are staff-relative);
+  - content start X from the first onset step (or a fallback inset).
+- On click:
+  - Find the measure whose x/y range contains the click.
+  - Quantize the horizontal position to a 0.25-quarter grid; clamp to the measure.
+  - Map vertical position to treble pitch: bottom staff line = E4, half a staff
+    space per diatonic step, using `staffBottomY`/`staffTopY`; clamp the MIDI
+    range.
+  - Apply the pending duration, dot and accidental; insert only if the range is
+    free (reject overlaps with a friendly error).
+  - Regenerate the blank XML from the current visible notes plus the new note,
+    select the new note, and push an undo snapshot.
+
+### Palette and editor layout
+
+In edit mode, use a focused editor layout: hide the load/practice sidebars and
+the big count card; keep a compact transport (Play, Restart, tempo ±, metronome)
+in the top toolbar; give the score the full page width. On desktop the notation
+palette becomes a sticky left rail (~118 px) with sections in this order:
+
+1. **Notes** — whole, half, quarter, eighth, sixteenth, dot.
+2. **Rests** — whole, half, quarter, eighth, sixteenth rest, directly below the
+   note values.
+3. **Accidentals** — flat / natural / sharp.
+4. **Octave** — 8↑ / 8↓.
+5. **Meter** — the time-signature selector.
+
+The palette should fall back to a horizontal toolbar on tablet/mobile.
+
+Pending input state (duration, dot, rest, accidental, octave) must remain active
+even with no note selected. Palette actions:
+
+- Note value on a selected note: change duration. On a selected rest: convert to
+  a note and set the duration. With no selection on a blank staff: set the
+  pending input value.
+- Rest value on a selected note: convert to a rest and try the chosen value. If
+  the value would not fit, still make a rest with the original duration and show
+  a warning. On a selected rest: change the duration. With no selection: set the
+  pending rest value.
+- Dot: toggle the selected note's dots or the pending dot state.
+- Accidentals: transpose the selected note by a semitone (natural resets the
+  spelling) and set the pending accidental.
+- Octave: transpose the selected note by ±12 semitones.
+
+### Keyboard input
+
+On a blank staff, maintain a keyboard insertion cursor (measureIndex, startQ)
+and show it as a dashed vertical line in the score. Initially at bar 1 beat 1;
+advance it after every inserted note/rest. Clicking a note/rest selects it and
+also moves the cursor to the end of that event.
+
+- **A–G** — insert that note name at the cursor using the pending octave,
+  accidental, duration and dot. Advance the cursor.
+- **Z / X** — lower/raise the pending input octave (2–6).
+- **1–5** — whole, half, quarter, eighth, sixteenth length for the next note.
+- **Shift+1–5** — select the equivalent rest and insert a rest at the cursor,
+  advancing it. The rest is a gap; the score generator fills it with a visible
+  rest of the correct value.
+- **← / →** — step the selection to the previous/next notehead, scroll it into
+  view, and audition it through the audio engine.
+- **↑ / ↓** — transpose the selected note by a semitone and audition the new
+  pitch; Shift = octave.
+- **Shift+← / →** — move the selected note rhythmically by one beat. Wrap across
+  bar lines; reject overlaps with a clear message. Time movement is supported on
+  the blank staff; show the MusicXML hint for existing scores.
+- **Delete / Backspace** — delete the selected note/range and replace it with
+  an equivalent rest. Mac keyboards send Backspace from the main delete key, so
+  support both; prevent page navigation on Backspace.
+- **Shift-click** — select the range of noteheads between the anchor and the
+  clicked note; highlight all of them. Delete applies to the whole range.
+
+Show an input status panel: current octave, bar/beat, and the shortcut summary.
+
+### Time signature
+
+- Show a **Meter** selector in the palette (2/4, 3/4, 4/4, 5/4, 6/8, 9/8, 12/8,
+  2/2, 3/8).
+- On a blank staff: apply globally by regenerating the page with the new meter.
+  Keep notes that fit; report how many were dropped.
+- On an existing score: write a `<time>` element into the selected measure's
+  `<attributes>` (or the first measure if nothing is selected). It applies from
+  that bar onward. Before applying, reject the change if existing notes in that
+  bar occupy more beats than the new meter, with a clear error message.
+- Preserve the selection after an existing-score meter change so the selector
+  keeps showing that bar's meter.
+
+---
+
+## 10. Reliability / edge cases
 
 - StrictMode double-mount must not leave duplicate scores or stale analysis.
 - Cancel in-flight OSMD loads when the piece changes.
@@ -419,7 +558,7 @@ Keyboard:
 
 ---
 
-## 10. Acceptance tests
+## 11. Acceptance tests
 
 1. `npm run build` and `npm run lint` pass.
 2. App opens with the Counting Warm-Up demo and counts 1–8 measures.
@@ -439,15 +578,34 @@ Keyboard:
    slider changes speed live, loop loops, restart works.
 9. Shuffle: toggle on, slider moves 50–75, playback applies swung timing to
    off-beat eighths; metronome stays straight.
-10. Upload a photo/PDF: busy state appears, OMR returns MusicXML, score renders,
+10. Kodály: toggle on, under-note labels become ta/ti/ka/ta-a/ta-i; toggle off
+    restores numeric labels.
+11. Upload a photo/PDF: busy state appears, OMR returns MusicXML, score renders,
     labels and playback work. Verify `POST /api/omr` returns 200.
-11. Upload a `.musicxml` file: internal title appears in the header.
-12. Production: `npm run build && npm run server` serves the app at :8000 and
+12. Upload a `.musicxml` file: internal title appears in the header.
+13. Blank staff:
+    - all 8 measures have a real layout width (no collapsed measures);
+    - empty measures show whole rests and hidden anchors keep the layout;
+    - clicking the staff adds a note at the clicked pitch/beat;
+    - typing A–G adds notes at the moving cursor; 1–5 changes length;
+    - Shift+1–5 enters rests; Z/X changes octave;
+    - the new note gets a count label and can be selected/edited;
+    - Delete and Backspace both replace a selected note/range with equivalent rests;
+    - Shift-click highlights a range and Delete clears it;
+    - ←/→ steps through notes and plays each one;
+    - ↑/↓ transposes the selected note and plays it;
+    - Shift+←/→ time moves work, including across bar lines;
+    - rests section is below note values and converts notes to rests;
+    - meter changes regenerate the page in the new meter (4/4, 6/8, etc.);
+    - Clear staff empties the notes but keeps the meter.
+14. Existing score meter: changing 4/4 to 3/4 is blocked when the bar contains
+    4 beats; changing to a meter that fits succeeds and updates counting.
+15. Production: `npm run build && npm run server` serves the app at :8000 and
     the API works.
 
 ---
 
-## 11. Suggested file structure
+## 12. Suggested file structure
 
 ```
 src/
@@ -473,7 +631,7 @@ server/
 README.md
 ```
 
-## 12. Constraints
+## 13. Constraints
 
 - No paid APIs or cloud services.
 - Keep everything local and runnable on macOS with Docker or a native Audiveris

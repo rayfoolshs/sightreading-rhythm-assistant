@@ -6,8 +6,10 @@ interface LoadPanelProps {
   status: string
   error: string | null
   activeName: string
+  omrAvailable: boolean | null
   onFile: (file: File) => void
   onDemo: (id: string) => void
+  onBlank: () => void
   onClearError: () => void
 }
 
@@ -16,8 +18,10 @@ export function LoadPanel({
   status,
   error,
   activeName,
+  omrAvailable,
   onFile,
   onDemo,
+  onBlank,
   onClearError,
 }: LoadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -88,11 +92,20 @@ export function LoadPanel({
         <div className="dropzone-hint">
           {busy
             ? 'Audiveris is converting it to MusicXML. This can take a minute.'
-            : 'JPG, PNG, HEIC, PDF, .xml or .musicxml · drag and drop or click'}
+            : omrAvailable === false
+              ? 'Hosted demo: MusicXML uploads work here. Photo/PDF OMR needs the local Audiveris server.'
+              : 'JPG, PNG, HEIC, PDF, .xml or .musicxml · drag and drop or click'}
         </div>
         {!busy && <span className="dropzone-action">Choose a file</span>}
         {busy && <span className="spinner dropzone-spinner" />}
       </div>
+
+      {omrAvailable === false && (
+        <div className="hosted-note">
+          Photo recognition is offline in this hosted build. Use a sample or
+          upload a MusicXML file. Run the app locally for Audiveris OMR.
+        </div>
+      )}
 
       {busy && <div className="inline-status">{status}</div>}
 
@@ -121,6 +134,18 @@ export function LoadPanel({
             <span className="demo-meta">{demo.description}</span>
           </button>
         ))}
+        <button
+          type="button"
+          className={`demo-item ${
+            activeName === 'Blank Staff' ? 'is-active' : ''
+          }`}
+          onClick={onBlank}
+        >
+          <span className="demo-name">Blank staff</span>
+          <span className="demo-meta">
+            Empty page — write your own notes
+          </span>
+        </button>
       </div>
     </section>
   )

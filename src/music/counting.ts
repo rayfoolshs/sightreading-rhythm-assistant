@@ -155,3 +155,37 @@ export function measureAt(
   }
   return found ?? analysis.measures[0]
 }
+
+export function kodalyForNote(
+  durationQ: number,
+  relQ: number,
+  ts: TimeSignature,
+): string {
+  if (durationQ >= 4 - 0.01) {
+    return 'ta-a-a-a'
+  }
+  if (durationQ >= 3 - 0.01) {
+    return 'ta-a-a'
+  }
+  if (durationQ >= 2 - 0.01) {
+    return 'ta-a'
+  }
+  if (durationQ >= 1.5 - 0.01) {
+    return 'ta-i'
+  }
+  if (durationQ >= 1 - 0.01) {
+    return 'ta'
+  }
+  if (durationQ >= 0.75 - 0.01) {
+    return 'tim'
+  }
+  if (durationQ >= 0.5 - 0.01) {
+    return 'ti'
+  }
+  if (durationQ >= 0.25 - 0.01) {
+    const beatPosition = relQ % pulseUnitQ(ts)
+    const index = Math.round(beatPosition / 0.25)
+    return index % 2 === 0 ? 'ti' : 'ka'
+  }
+  return 'ti'
+}

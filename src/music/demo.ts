@@ -1,3 +1,5 @@
+import preludeXml from './pieces/prelude.musicxml?raw'
+
 export interface DemoPiece {
   id: string
   name: string
@@ -141,6 +143,12 @@ const compoundEtude = `<?xml version="1.0" encoding="UTF-8"?>
 </score-partwise>`
 
 export const demoPieces: DemoPiece[] = [
+  {
+    id: 'prelude-g-harmonic-minor',
+    name: 'Prelude in G Harmonic Minor',
+    description: 'Flute + piano · three staves · G harmonic minor',
+    xml: preludeXml,
+  },
   {
     id: 'counting-warmup',
     name: 'Counting Warm-Up',

@@ -18,6 +18,29 @@ export interface NoteEvent {
   velocity: number
 }
 
+export interface NoteSelection {
+  measureIndex: number
+  onsetQ: number
+  midi: number | null
+}
+
+export interface NoteHead {
+  x: number
+  y: number
+  measureIndex: number
+  onsetQ: number
+  midi: number
+  staffIndex: number
+  durationQ: number
+}
+
+export interface RestHead {
+  x: number
+  y: number
+  measureIndex: number
+  onsetQ: number
+}
+
 export interface VisualStep {
   q: number
   x: number
@@ -30,8 +53,33 @@ export interface VisualStep {
   label: CountLabel
   gridQ: number
   beamGroup?: number
+  staffIndex?: number
   durationQ: number
+  noteHeads: NoteHead[]
+  restHeads: RestHead[]
   hasNotes: boolean
+}
+
+export interface StaffLayout {
+  staffIndex: number
+  measureIndex: number
+  x: number
+  y: number
+  width: number
+  height: number
+  staffTopY: number
+  staffBottomY: number
+}
+
+export interface MeasureLayout {
+  measureIndex: number
+  x: number
+  y: number
+  width: number
+  height: number
+  staffTopY: number
+  staffBottomY: number
+  contentStartX: number
 }
 
 export interface MeasureInfo {
@@ -56,6 +104,10 @@ export interface ScoreAnalysis {
   steps: VisualStep[]
   notes: NoteEvent[]
   measures: MeasureInfo[]
+  layout: MeasureLayout[]
+  staffLayouts: StaffLayout[]
+  staffSteps: VisualStep[]
+  staffCount: number
   beats: Beat[]
   totalQ: number
   initialBpm: number

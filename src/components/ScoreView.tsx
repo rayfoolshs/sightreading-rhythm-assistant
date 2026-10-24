@@ -8,17 +8,38 @@ import {
 } from 'react'
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay'
 import { analyzeScore } from '../music/analyze'
-import { pulseUnitQ } from '../music/counting'
-import type { ScoreAnalysis, VisualStep } from '../music/types'
+import { kodalyForNote, pulseUnitQ } from '../music/counting'
+import type {
+  MeasureLayout,
+  NoteHead,
+  NoteSelection,
+  RestHead,
+  ScoreAnalysis,
+  VisualStep,
+} from '../music/types'
 
 export interface ScoreViewHandle {
   sync: (q: number, playing: boolean) => void
   scrollToTop: () => void
+  focusSelection: (selection: NoteSelection) => void
 }
 
 interface ScoreViewProps {
   xml: string
   follow: boolean
+  countingStyle: 'numbers' | 'kodaly'
+  visibleStaffs: Record<number, boolean>
+  editMode: boolean
+  inputEnabled: boolean
+  inputRest: boolean
+  selections: NoteSelection[]
+  inputCursor: { measureIndex: number; startQ: number } | null
+  onSelectNote: (selection: NoteSelection, extend: boolean) => void
+  onInputNote: (input: {
+    measureIndex: number
+    startQ: number
+    midi: number
+  }) => void
   onAnalysis: (analysis: ScoreAnalysis) => void
   onError: (message: string) => void
 }
@@ -64,6 +85,62 @@ function beamGroupsFor(beats: number, beatType: number): number[][] | null {
   return Array.from({ length: beats }, () => unit)
 }
 
+function labelY(analysis: ScoreAnalysis, step: VisualStep): number {
+  const staffIndex = step.staffIndex ?? 0
+  const current = analysis.staffLayouts.find(
+    (layout) =>
+      layout.measureIndex === step.measureIndex &&
+      layout.staffIndex === staffIndex,
+  )
+  if (!current) {
+    return step.y + step.height + 32
+  }
+  const next = analysis.staffLayouts.find(
+    (layout) =>
+      layout.measureIndex === step.measureIndex &&
+      layout.staffIndex === staffIndex + 1,
+  )
+  let offset = 32
+  if (next && next.staffTopY > current.staffBottomY) {
+    const gap = next.staffTopY - current.staffBottomY
+    offset = Math.max(8, Math.min(32, gap - 26))
+  }
+  return current.staffBottomY + offset
+}
+
+function labelSteps(analysis: ScoreAnalysis): VisualStep[] {
+  return analysis.staffSteps.length > 0
+    ? analysis.staffSteps
+    : analysis.steps
+}
+
+function buildKodalyLabels(analysis: ScoreAnalysis): LabelItem[] {
+  const labels: LabelItem[] = []
+  const seen = new Set<string>()
+  for (const step of labelSteps(analysis)) {
+    if (!step.hasNotes || step.noteHeads.length === 0) {
+      continue
+    }
+    const staffIndex = step.staffIndex ?? 0
+    const key = `${staffIndex}:${step.measureIndex}:${Math.round(step.q * 1000)}`
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    labels.push({
+      q: step.q,
+      x: step.x,
+      y: labelY(analysis, step),
+      text: kodalyForNote(step.durationQ, step.relQ, step.timeSignature),
+      compact: false,
+      range: false,
+      staffIndex,
+    })
+  }
+  labels.sort((a, b) => a.q - b.q)
+  return labels
+}
+
 interface LabelItem {
   q: number
   x: number
@@ -71,6 +148,7 @@ interface LabelItem {
   text: string
   compact: boolean
   range: boolean
+  staffIndex: number
 }
 
 function buildLabels(analysis: ScoreAnalysis): LabelItem[] {
@@ -80,22 +158,23 @@ function buildLabels(analysis: ScoreAnalysis): LabelItem[] {
   const groups = new Map<string, VisualStep[]>()
   const seen = new Set<string>()
 
-  for (const step of analysis.steps) {
-    if (!step.hasNotes) {
+  for (const step of labelSteps(analysis)) {
+    if (!step.hasNotes || step.noteHeads.length === 0) {
       continue
     }
     const measure = measures.get(step.measureIndex)
     if (!measure) {
       continue
     }
-    const dedupeKey = `${step.measureIndex}:${Math.round(step.q * 1000)}`
+    const staffIndex = step.staffIndex ?? 0
+    const dedupeKey = `${staffIndex}:${step.measureIndex}:${Math.round(step.q * 1000)}`
     if (seen.has(dedupeKey)) {
       continue
     }
     seen.add(dedupeKey)
     const unit = pulseUnitQ(measure.timeSignature)
     const beatIndex = Math.floor(step.relQ / unit + 0.0001)
-    const key = `${measure.index}:${beatIndex}`
+    const key = `${staffIndex}:${measure.index}:${beatIndex}`
     const group = groups.get(key)
     if (group) {
       group.push(step)
@@ -154,10 +233,11 @@ function buildLabels(analysis: ScoreAnalysis): LabelItem[] {
       labels.push({
         q: step.q,
         x: step.x,
-        y: step.y + step.height + 32,
+        y: labelY(analysis, step),
         text,
         compact,
         range,
+        staffIndex: step.staffIndex ?? 0,
       })
     }
   }
@@ -166,14 +246,40 @@ function buildLabels(analysis: ScoreAnalysis): LabelItem[] {
 }
 
 const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
-  function ScoreView({ xml, follow, onAnalysis, onError }, ref) {
+  function ScoreView(
+    {
+      xml,
+      follow,
+      countingStyle,
+      visibleStaffs,
+      editMode,
+      inputEnabled,
+      inputRest,
+      selections,
+      inputCursor,
+      onSelectNote,
+      onInputNote,
+      onAnalysis,
+      onError,
+    },
+    ref,
+  ) {
     const hostRef = useRef<HTMLDivElement>(null)
     const canvasRef = useRef<HTMLDivElement>(null)
     const viewportRef = useRef<HTMLDivElement>(null)
     const lineRef = useRef<HTMLDivElement>(null)
     const analysisRef = useRef<ScoreAnalysis | null>(null)
-    const activeLabelRef = useRef<HTMLDivElement | null>(null)
+    const layoutRef = useRef<MeasureLayout[]>([])
+    const styleRef = useRef(countingStyle)
+    styleRef.current = countingStyle
+    const activeLabelsRef = useRef<Set<HTMLDivElement>>(new Set())
     const [labels, setLabels] = useState<LabelItem[]>([])
+    const [noteHeads, setNoteHeads] = useState<NoteHead[]>([])
+    const [restHeads, setRestHeads] = useState<RestHead[]>([])
+    const [inputGhost, setInputGhost] = useState<{
+      x: number
+      y: number
+    } | null>(null)
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
@@ -184,6 +290,9 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
       }
       setLoading(true)
       setLabels([])
+      setNoteHeads([])
+      setRestHeads([])
+      layoutRef.current = []
       analysisRef.current = null
       host.replaceChildren()
 
@@ -230,7 +339,18 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
             return
           }
           analysisRef.current = analysis
-          setLabels(buildLabels(analysis))
+          setLabels(
+            styleRef.current === 'kodaly'
+              ? buildKodalyLabels(analysis)
+              : buildLabels(analysis),
+          )
+          layoutRef.current = analysis.layout
+          setNoteHeads(
+            analysis.steps.flatMap((step) => step.noteHeads),
+          )
+          setRestHeads(
+            analysis.steps.flatMap((step) => step.restHeads),
+          )
           setLoading(false)
           onAnalysis(analysis)
         } catch (error) {
@@ -256,6 +376,117 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
         host.replaceChildren()
       }
     }, [xml, onAnalysis, onError])
+
+    const resolveInputAt = (clientX: number, clientY: number) => {
+      if (!inputEnabled) {
+        return null
+      }
+      const canvas = canvasRef.current
+      const analysis = analysisRef.current
+      if (!canvas || !analysis) {
+        return null
+      }
+      const rect = canvas.getBoundingClientRect()
+      const x = clientX - rect.left
+      const y = clientY - rect.top
+      const layout = layoutRef.current.find(
+        (item) =>
+          x >= item.x - 4 &&
+          x <= item.x + item.width + 4 &&
+          y >= item.staffTopY - 55 &&
+          y <= item.staffBottomY + 55,
+      )
+      if (!layout) {
+        return null
+      }
+      const measure = analysis.measures.find(
+        (item) => item.index === layout.measureIndex,
+      )
+      if (!measure) {
+        return null
+      }
+      const startX = Math.min(
+        layout.contentStartX,
+        layout.x + layout.width - 10,
+      )
+      const endX = layout.x + layout.width - 3
+      const relative =
+        endX > startX
+          ? Math.max(0, Math.min(1, (x - startX) / (endX - startX)))
+          : 0
+      let startQ = Math.round((relative * measure.durationQ) / 0.25) * 0.25
+      startQ = Math.max(0, Math.min(measure.durationQ - 0.25, startQ))
+      const halfSpace = (layout.staffBottomY - layout.staffTopY) / 8
+      if (halfSpace <= 0) {
+        return null
+      }
+      const steps = Math.round((layout.staffBottomY - y) / halfSpace)
+      const semitones = [0, 2, 4, 5, 7, 9, 11]
+      const diatonic = 4 * 7 + 2 + steps
+      const octave = Math.floor(diatonic / 7)
+      const letter = ((diatonic % 7) + 7) % 7
+      const midi = (octave + 1) * 12 + semitones[letter]
+      if (midi < 24 || midi > 100) {
+        return null
+      }
+      const snappedX =
+        startX +
+        (startQ / Math.max(0.25, measure.durationQ)) * (endX - startX)
+      const snappedY = layout.staffBottomY - steps * halfSpace
+      return {
+        measureIndex: measure.index,
+        startQ,
+        midi,
+        x: snappedX,
+        y: snappedY,
+      }
+    }
+
+    const handleInputClick = (event: React.MouseEvent<HTMLDivElement>) => {
+      const resolved = resolveInputAt(event.clientX, event.clientY)
+      if (!resolved) {
+        return
+      }
+      onInputNote({
+        measureIndex: resolved.measureIndex,
+        startQ: resolved.startQ,
+        midi: resolved.midi,
+      })
+    }
+
+    const handleInputMove = (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!inputEnabled) {
+        setInputGhost(null)
+        return
+      }
+      const resolved = resolveInputAt(event.clientX, event.clientY)
+      if (!resolved) {
+        setInputGhost(null)
+        return
+      }
+      setInputGhost((previous) => {
+        if (
+          previous &&
+          Math.abs(previous.x - resolved.x) < 0.5 &&
+          Math.abs(previous.y - resolved.y) < 0.5
+        ) {
+          return previous
+        }
+        return { x: resolved.x, y: resolved.y }
+      })
+    }
+
+    useEffect(() => {
+      const analysis = analysisRef.current
+      if (!analysis) {
+        return
+      }
+      setLabels(
+        countingStyle === 'kodaly'
+          ? buildKodalyLabels(analysis)
+          : buildLabels(analysis),
+      )
+    }, [countingStyle])
 
     useImperativeHandle(ref, () => ({
       sync(q: number, _playing: boolean) {
@@ -306,19 +537,29 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
 
         const canvas = canvasRef.current
         if (canvas) {
+          const lastByStaff = new Map<string, HTMLDivElement>()
           const labelEls = canvas.querySelectorAll<HTMLDivElement>('.note-count')
-          let active: HTMLDivElement | null = null
           for (const element of labelEls) {
             const labelQ = Number(element.dataset.q)
-            if (labelQ <= q + 0.0001) {
-              active = element
+            if (labelQ > q + 0.0001) {
+              continue
+            }
+            const staff = element.dataset.staff ?? '0'
+            const previous = lastByStaff.get(staff)
+            if (!previous || Number(previous.dataset.q) <= labelQ) {
+              lastByStaff.set(staff, element)
             }
           }
-          if (activeLabelRef.current !== active) {
-            activeLabelRef.current?.classList.remove('is-active')
-            active?.classList.add('is-active')
-            activeLabelRef.current = active
+          const active = new Set(lastByStaff.values())
+          for (const element of activeLabelsRef.current) {
+            if (!active.has(element)) {
+              element.classList.remove('is-active')
+            }
           }
+          for (const element of active) {
+            element.classList.add('is-active')
+          }
+          activeLabelsRef.current = active
         }
 
         if (follow) {
@@ -341,7 +582,63 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
       scrollToTop() {
         viewportRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
       },
+      focusSelection(target: NoteSelection) {
+        const viewport = viewportRef.current
+        if (!viewport) {
+          return
+        }
+        const head =
+          target.midi === null
+            ? restHeads.find(
+                (item) =>
+                  item.measureIndex === target.measureIndex &&
+                  Math.abs(item.onsetQ - target.onsetQ) < 0.02,
+              )
+            : noteHeads.find(
+                (item) =>
+                  item.measureIndex === target.measureIndex &&
+                  Math.abs(item.onsetQ - target.onsetQ) < 0.02 &&
+                  item.midi === target.midi,
+              )
+        if (!head) {
+          return
+        }
+        viewport.scrollTo({
+          top: Math.max(0, head.y - viewport.clientHeight * 0.4),
+          behavior: 'smooth',
+        })
+      },
     }))
+
+    const cursorPosition = (() => {
+      if (!inputEnabled || !inputCursor) {
+        return null
+      }
+      const analysis = analysisRef.current
+      const layout = layoutRef.current.find(
+        (item) => item.measureIndex === inputCursor.measureIndex,
+      )
+      const measure = analysis?.measures.find(
+        (item) => item.index === inputCursor.measureIndex,
+      )
+      if (!layout || !measure) {
+        return null
+      }
+      const startX = Math.min(
+        layout.contentStartX,
+        layout.x + layout.width - 10,
+      )
+      const endX = layout.x + layout.width - 3
+      const x =
+        startX +
+        (inputCursor.startQ / Math.max(0.25, measure.durationQ)) *
+          (endX - startX)
+      return {
+        x,
+        top: layout.staffTopY,
+        height: Math.max(24, layout.staffBottomY - layout.staffTopY),
+      }
+    })()
 
     return (
       <div className="score-shell">
@@ -354,17 +651,120 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
         <div className="score-viewport" ref={viewportRef}>
           <div className="score-canvas" ref={canvasRef}>
             <div className="osmd-host" ref={hostRef} />
+            {inputEnabled && (
+              <div
+                className="score-input-layer"
+                onClick={handleInputClick}
+                onMouseMove={handleInputMove}
+                onMouseLeave={() => setInputGhost(null)}
+                aria-hidden="true"
+              >
+                {inputGhost && (
+                  <div
+                    className="input-ghost"
+                    style={{ left: inputGhost.x, top: inputGhost.y }}
+                  >
+                    {inputRest ? (
+                      <span className="ghost-rest" />
+                    ) : (
+                      <>
+                        <span className="ghost-note" />
+                        <span className="ghost-stem" />
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {cursorPosition && (
+              <div
+                className="input-cursor"
+                style={{
+                  left: cursorPosition.x,
+                  top: cursorPosition.top,
+                  height: cursorPosition.height,
+                }}
+                aria-hidden="true"
+              />
+            )}
+            {editMode && (
+              <div className="note-hit-layer">
+                {noteHeads.map((head) => {
+                  const selected = selections.some(
+                    (item) =>
+                      item.midi !== null &&
+                      item.measureIndex === head.measureIndex &&
+                      Math.abs(item.onsetQ - head.onsetQ) < 0.02 &&
+                      item.midi === head.midi,
+                  )
+                  return (
+                    <button
+                      key={`${head.measureIndex}-${head.onsetQ}-${head.midi}-${head.x}`}
+                      type="button"
+                      className={`note-hit ${selected ? 'is-selected' : ''}`}
+                      style={{ left: head.x, top: head.y }}
+                      onClick={(event) =>
+                        onSelectNote(
+                          {
+                            measureIndex: head.measureIndex,
+                            onsetQ: head.onsetQ,
+                            midi: head.midi,
+                          },
+                          event.shiftKey,
+                        )
+                      }
+                      aria-label={`Edit note at measure ${head.measureIndex + 1}`}
+                    />
+                  )
+                })}
+                {!inputEnabled &&
+                  restHeads.map((head) => {
+                    const selected = selections.some(
+                      (item) =>
+                        item.midi === null &&
+                        item.measureIndex === head.measureIndex &&
+                        Math.abs(item.onsetQ - head.onsetQ) < 0.02,
+                    )
+                    return (
+                      <button
+                        key={`rest-${head.measureIndex}-${head.onsetQ}-${head.x}`}
+                        type="button"
+                        className={`note-hit is-rest ${
+                          selected ? 'is-selected' : ''
+                        }`}
+                        style={{ left: head.x, top: head.y }}
+                        onClick={() =>
+                          onSelectNote(
+                            {
+                              measureIndex: head.measureIndex,
+                              onsetQ: head.onsetQ,
+                              midi: null,
+                            },
+                            false,
+                          )
+                        }
+                        aria-label={`Edit rest at measure ${head.measureIndex + 1}`}
+                      />
+                    )
+                  })}
+              </div>
+            )}
             <div className="note-count-layer" aria-hidden="true">
-              {labels.map((label) => (
-                <div
-                  key={`${label.q}-${label.x}`}
-                  className={`note-count ${label.compact ? 'is-compact' : ''} ${label.range ? 'is-range' : ''}`}
-                  data-q={label.q}
-                  style={{ left: label.x, top: label.y }}
-                >
-                  {label.text}
-                </div>
-              ))}
+              {labels
+                .filter(
+                  (label) => visibleStaffs[label.staffIndex] !== false,
+                )
+                .map((label) => (
+                  <div
+                    key={`${label.staffIndex}-${label.q}-${label.x}`}
+                    className={`note-count ${label.compact ? 'is-compact' : ''} ${label.range ? 'is-range' : ''}`}
+                    data-q={label.q}
+                    data-staff={label.staffIndex}
+                    style={{ left: label.x, top: label.y }}
+                  >
+                    {label.text}
+                  </div>
+                ))}
             </div>
             <div className="playhead" ref={lineRef} aria-hidden="true">
               <span className="playhead-dot" />
