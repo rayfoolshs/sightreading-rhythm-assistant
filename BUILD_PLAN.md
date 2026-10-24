@@ -65,12 +65,12 @@ Minor* (flute + piano, three staves).
 - [x] MIDI import tested with melody, duet, and wide piano tracks
 - [x] GitHub Pages build configured with repo base path
 - [x] Hosted-build OMR fallback message
-- [ ] Commit latest source and push `main`
-- [ ] Make repository public
+- [x] Commit latest source and push `main`
+- [x] Make repository public
 - [x] Publish the static build to the `gh-pages` branch
 - [x] Set GitHub Pages to serve the `gh-pages` branch
-- [x] Verify deployed Pages URL: <https://rayfoolshs.github.io/sightreading-rhythm-assistant/>
-- [ ] Tag release `v1.0.0` (optional)
+- [x] Verify deployed Pages URL (default prelude + MIDI upload): <https://rayfoolshs.github.io/sightreading-rhythm-assistant/>
+- [x] Tag release `v1.1.0`
 
 ## Post-1.0 roadmap
 
