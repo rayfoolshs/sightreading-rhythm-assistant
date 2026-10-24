@@ -64,7 +64,7 @@ Minor* (flute + piano, three staves).
 - [ ] Make repository public
 - [x] Publish the static build to the `gh-pages` branch
 - [x] Set GitHub Pages to serve the `gh-pages` branch
-- [ ] Verify deployed Pages URL
+- [x] Verify deployed Pages URL: <https://rayfoolshs.github.io/sightreading-rhythm-assistant/>
 - [ ] Tag release `v1.0.0` (optional)
 
 ## Post-1.0 roadmap
@@ -94,6 +94,7 @@ Hosted build:
 VITE_BASE_PATH=/sightreading-rhythm-assistant/ npm run build
 ```
 
-The hosted build is published from the `gh-pages` branch (static files only),
+The hosted build is live at <https://rayfoolshs.github.io/sightreading-rhythm-assistant/>
+and is published from the `gh-pages` branch (static files only),
 so it does not need a GitHub Actions workflow token scope. A future improvement
 is to deploy from Actions if the maintainer adds the `workflow` token scope.
