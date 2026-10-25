@@ -1,5 +1,6 @@
 import { Midi } from '@tonejs/midi'
 import { durationType } from './musicxmlEditor'
+import { octaveFor, preferFromFifths, spellMidi } from './spelling'
 
 const GRID_Q = 0.25
 const MIN_DURATION = 0.25
@@ -23,21 +24,6 @@ export interface MidiImportResult {
   title: string
   partCount: number
 }
-
-const SPELLINGS: Array<[string, number]> = [
-  ['C', 0],
-  ['C', 1],
-  ['D', 0],
-  ['D', 1],
-  ['E', 0],
-  ['F', 0],
-  ['F', 1],
-  ['G', 0],
-  ['G', 1],
-  ['A', 0],
-  ['A', 1],
-  ['B', 0],
-]
 
 const KEY_SIGNATURE_KEYS = [
   'Cb',
@@ -90,9 +76,9 @@ function fitDuration(value: number, available: number): number | null {
   return best >= MIN_DURATION ? best : null
 }
 
-function pitchXml(midi: number): string {
-  const [step, alter] = SPELLINGS[((midi % 12) + 12) % 12]
-  const octave = Math.floor(midi / 12) - 1
+function pitchXml(midi: number, fifths: number): string {
+  const { step, alter } = spellMidi(midi, preferFromFifths(fifths))
+  const octave = octaveFor(midi, step, alter)
   const alterXml = alter === 0 ? '' : `<alter>${alter}</alter>`
   return `<pitch><step>${step}</step>${alterXml}<octave>${octave}</octave></pitch>`
 }
@@ -109,10 +95,11 @@ function noteXml(
   midi: number,
   durationQ: number,
   isChord: boolean,
+  fifths: number,
 ): string {
   const duration = Math.round(durationQ * 8)
   const chord = isChord ? '<chord/>' : ''
-  return `<note>${chord}${pitchXml(midi)}<duration>${duration}</duration><voice>1</voice>${typeXml(durationQ)}</note>`
+  return `<note>${chord}${pitchXml(midi, fifths)}<duration>${duration}</duration><voice>1</voice>${typeXml(durationQ)}</note>`
 }
 
 function restXml(durationQ: number): string {
@@ -186,6 +173,7 @@ function measureNotes(
   notes: ImportedNote[],
   measureIndex: number,
   measureQ: number,
+  fifths: number,
 ): string {
   const starts = notes
     .map((note) => ({
@@ -230,7 +218,7 @@ function measureNotes(
       (a, b) => a.midi - b.midi,
     )
     pitches.forEach((note, pitchIndex) => {
-      body.push(noteXml(note.midi, duration, pitchIndex > 0))
+      body.push(noteXml(note.midi, duration, pitchIndex > 0, fifths))
     })
     cursor = startQ + duration
   }
@@ -267,7 +255,7 @@ function buildPartXml(
         ...note,
         startQ: note.startQ,
       }))
-    const body = measureNotes(notes, measureIndex, measureQ)
+    const body = measureNotes(notes, measureIndex, measureQ, fifths)
     const barline =
       measureIndex === measures - 1
         ? '<barline location="right"><bar-style>light-heavy</bar-style></barline>'

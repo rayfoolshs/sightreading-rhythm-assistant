@@ -8,9 +8,9 @@ Kodály syllables, and a notation editor.
 
 ## Current status
 
-**Feature-complete for v1.1.** The app builds, lints, and runs locally with the
-OMR server. The default example is the user-provided *Prelude in G Harmonic
-Minor* (flute + piano, three staves).
+**Feature-complete for v1.1, plus a post-review maintenance pass.** The app
+builds, lints, and runs locally with the OMR server. The default example is the
+user-provided *Prelude in G Harmonic Minor* (flute + piano, three staves).
 
 ### Completed
 
@@ -36,13 +36,20 @@ Minor* (flute + piano, three staves).
 - GitHub Pages publication from a static `gh-pages` branch (OMR disabled in the
   hosted build with a clear in-app notice).
 - GitHub backup repository.
+- Post-review fixes: key-aware flat/sharp spelling; tied notes sustain across
+  the whole chain; chord-member and tied-note deletion; OMR health timeout and
+  cache with a re-check path; error boundary; accessibility (live regions, score
+  tab order, reduced motion); lazy-loaded OSMD/MIDI chunks.
+- Vitest unit suite (`npm test`) covering counting, spelling, MusicXML edits,
+  blank staff, MIDI import, counting-label layout and click geometry.
 
 ### Known limitations
 
 - Photo OMR requires the local Python + Docker backend. The public GitHub Pages
   build supports samples, MusicXML, and MIDI uploads only.
 - The blank staff is a single treble staff, monophonic for click/keyboard input.
-  Chords, multiple staves, and advanced notation use the raw MusicXML editor.
+  Changing a chord's note value and adding multiple staves need the raw MusicXML
+  editor; individual chord notes can be transposed or deleted.
 - Kodály syllables are a per-note v1 mapping (`ta`, `ti`, `ka`, `ta-a`, `ta-i`);
   beam-group spellings such as `ti-ti`/`tika-tika` are a future refinement.
 - Time signatures on existing scores are validated for note overflow but do not
@@ -50,17 +57,20 @@ Minor* (flute + piano, three staves).
 - Repeats/D.C. are ignored in the playback timeline.
 - MIDI import is basic: triplets/swing are quantized to 16ths, chords at an onset
   share a duration, and complex polyphony may need cleanup.
-- No automated test suite yet; validation is via build/lint plus manual browser
-  smoke tests.
+- Automated unit tests cover the music logic; browser flows (playback, OMR,
+  uploads) are still checked by hand.
 
 ## Release checklist
 
 - [x] `npm run build`
 - [x] `npm run lint`
+- [x] `npm test`
 - [x] Default prelude loads and renders
 - [x] Multi-staff labels + S1/S2/S3 toggles
 - [x] Kodály toggle
 - [x] Editor/keyboard/delete/range flows
+- [x] Chord-member and tied-note deletion
+- [x] Flat/sharp spelling preserved through edits
 - [x] OMR health/end-to-end round trip
 - [x] MIDI import tested with melody, duet, and wide piano tracks
 - [x] GitHub Pages build configured with repo base path
@@ -71,13 +81,15 @@ Minor* (flute + piano, three staves).
 - [x] Set GitHub Pages to serve the `gh-pages` branch
 - [x] Verify deployed Pages URL (default prelude + MIDI upload): <https://rayfoolshs.github.io/sightreading-rhythm-assistant/>
 - [x] Tag release `v1.1.0`
+- [x] Republish `gh-pages` after the post-1.1 fixes
 
 ## Post-1.0 roadmap
 
 1. Hosted OMR option (cloud OCR or a self-hosted backend) for the public demo.
 2. Full chord-aware editor, drag-to-select ranges, drag-to-move notes.
 3. Kodály beam-group spellings and compound-meter refinements.
-4. Automated Playwright tests for OMR, MIDI, counting, editor, and Pages.
+4. Automated Playwright tests for browser flows (OMR, Pages); unit coverage
+   already covers counting, editing, blank staff, spelling and MIDI import.
 5. PDF multi-page import, repeats/D.C., count-in bar, section looping.
 6. Persist practice history and custom exercises.
 
@@ -91,12 +103,28 @@ npm run server        # OMR API :8000
 npm run dev           # app :5173
 npm run build
 npm run lint
+npm test
 ```
 
 Hosted build:
 
 ```bash
 VITE_BASE_PATH=/sightreading-rhythm-assistant/ npm run build
+```
+
+### Publishing the hosted build
+
+Pages serves the static `gh-pages` branch (no Actions workflow needed):
+
+```bash
+VITE_BASE_PATH=/sightreading-rhythm-assistant/ npm run build
+git worktree add /tmp/sr-pages gh-pages
+rsync -a --delete --exclude '.git' dist/ /tmp/sr-pages/
+touch /tmp/sr-pages/.nojekyll
+git -C /tmp/sr-pages add -A
+git -C /tmp/sr-pages commit -m "Deploy hosted build"
+git -C /tmp/sr-pages push origin gh-pages
+git worktree remove /tmp/sr-pages
 ```
 
 The hosted build is live at <https://rayfoolshs.github.io/sightreading-rhythm-assistant/>

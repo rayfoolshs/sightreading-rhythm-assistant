@@ -62,6 +62,9 @@ npm run server
 npm run dev
 ```
 
+Check the project with `npm test` (unit tests for the music logic), `npm run lint`,
+and `npm run build`.
+
 Open <http://localhost:5173>. The first photo upload pulls the
 `toprock/audiveris:stable` image (about 1 GB, once) and can take ~40–60 seconds.
 Later conversions are faster.
@@ -125,8 +128,10 @@ the selected note or range.
 
 Changing a note value automatically adjusts the following note so the bar still
 adds up. Deleting a note turns it into a rest of the same value, so the timing
-stays intact. Chords and resizing the last note in a measure need the MusicXML
-editor.
+stays intact. Deleting one notehead of a chord removes only that note — if it
+was the chord's base note, the next member is promoted — and deleting a tied
+note clears every tied segment. Changing a chord's note value, and resizing the
+last note in a measure, still need the MusicXML editor.
 
 ### Photo tips for better recognition
 
@@ -161,7 +166,13 @@ quarter/eighth/sixteenth subdivisions use `1 e & a`, while compound meters
 
 ```
 src/
-  App.tsx                 app state, loading, keyboard shortcuts
+  App.tsx                 app state, loading, file import, edit orchestration
+  api/
+    omr.ts                OMR health probe
+  hooks/
+    useOmrHealth.ts       backend availability and re-check
+    usePlaybackShortcuts.ts
+    useEditorShortcuts.ts
   components/
     ScoreView.tsx         OSMD render, labels, playhead, auto-scroll
     CountDisplay.tsx      big current-count card
@@ -169,16 +180,22 @@ src/
     LoadPanel.tsx         upload/dropzone, samples, OMR status
     EditorPanel.tsx       selected-note inspector and editor hints
     NotationPalette.tsx   flat.io-style note/rest/accidental palette
+    ErrorBoundary.tsx     recover from engrave/render failures
   music/
     analyze.ts            OSMD cursor walk → timeline + label positions
     counting.ts           count labels, beat grids, position description
+    labels.ts             counting-label placement and grouping
+    geometry.ts           score click → snapped note position
+    spelling.ts           flat/sharp spelling shared by edits and MIDI import
     musicxmlEditor.ts     MusicXML note lookup, pitch/duration/rest edits
     blankScore.ts         empty-staff generation + click-to-write notes
+    midiImport.ts         MIDI → MusicXML
     pieces/prelude.musicxml  default flute + piano example
     player.ts             lookahead scheduler, loop/seek/tempo handling
     audio.ts              Web Audio piano-ish synth + metronome clicks
     demo.ts               built-in MusicXML samples
     types.ts              shared types
+    *.test.ts             Vitest suites for the pure music modules
 server/
   main.py                 FastAPI OMR endpoint + optional static hosting
   requirements.txt
@@ -197,8 +214,8 @@ server/
 ## Limitations
 
 - OMR is hard: dense, handwritten, skewed, or low-resolution pages will produce
-  mistakes. Use the editor to fix individual notes; chords and a few rhythm
-  cases still need the raw MusicXML editor.
+  mistakes. Use the editor to fix individual notes; changing a chord's note
+  value and a few rhythm cases still need the raw MusicXML editor.
 - The blank staff is a single treble staff. Click/type-to-write notes are
   monophonic; use MusicXML for chords or multiple staves.
 - Keyboard note entry and free time-movement of notes are available on the blank

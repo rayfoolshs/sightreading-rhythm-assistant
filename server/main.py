@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -38,6 +39,9 @@ IMAGE_EXTENSIONS = {
 AUDIVERIS_IMAGE = os.environ.get("AUDIVERIS_DOCKER_IMAGE", "toprock/audiveris:stable")
 AUDIVERIS_BIN = os.environ.get("AUDIVERIS_BIN", "").strip()
 OMR_LOCK = threading.Lock()
+HEALTH_CACHE_SECONDS = 5.0
+_HEALTH_LOCK = threading.Lock()
+_HEALTH_CACHE: tuple[float, bool] = (0.0, False)
 WORK_ROOT = Path(
     os.environ.get(
         "OMR_WORK_DIR",
@@ -79,6 +83,25 @@ def docker_hint() -> str:
         "Docker is not responding. Start Docker Desktop (or run `colima start`), "
         "then try the photo again."
     )
+
+
+def docker_available_cached() -> bool:
+    """Cache the daemon probe so health polling stays cheap.
+
+    `docker info` can take several seconds on a cold daemon, and the frontend
+    polls this endpoint; repeating the probe on every request made a healthy
+    backend look offline.
+    """
+    global _HEALTH_CACHE
+    now = time.monotonic()
+    with _HEALTH_LOCK:
+        cached_at, cached_value = _HEALTH_CACHE
+        if now - cached_at < HEALTH_CACHE_SECONDS:
+            return cached_value
+    value = docker_available()
+    with _HEALTH_LOCK:
+        _HEALTH_CACHE = (time.monotonic(), value)
+    return value
 
 
 def find_musicxml(output_dir: Path) -> Optional[Path]:
@@ -228,7 +251,7 @@ def run_omr(input_pdf: Path, output_dir: Path) -> str:
 @app.get("/api/health")
 def health() -> dict:
     has_binary = bool(AUDIVERIS_BIN)
-    has_docker = docker_available()
+    has_docker = docker_available_cached()
     return {
         "ready": has_binary or has_docker,
         "audiverisBinary": AUDIVERIS_BIN or None,

@@ -9,8 +9,8 @@ import { ScoreView, type ScoreViewHandle } from './components/ScoreView'
 import { AudioEngine } from './music/audio'
 import { describePosition } from './music/counting'
 import { demoPieces } from './music/demo'
-import { midiToMusicXml } from './music/midiImport'
 import {
+  deleteNote,
   findEditableNote,
   naturalizeNote,
   parseEditableNotes,
@@ -30,6 +30,9 @@ import {
   normalizeBlankXml,
 } from './music/blankScore'
 import { Player } from './music/player'
+import { useEditorShortcuts } from './hooks/useEditorShortcuts'
+import { useOmrHealth } from './hooks/useOmrHealth'
+import { usePlaybackShortcuts } from './hooks/usePlaybackShortcuts'
 import type { NoteSelection, ScoreAnalysis } from './music/types'
 
 interface OmrResponse {
@@ -65,7 +68,7 @@ function App() {
   const [volume, setVolume] = useState(0.75)
   const [muted, setMuted] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [omrAvailable, setOmrAvailable] = useState<boolean | null>(null)
+  const { omrAvailable, refresh: refreshOmr, probe: probeOmr } = useOmrHealth()
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
@@ -113,30 +116,6 @@ function App() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => controller.abort(), 3000)
-    fetch('/api/health', { signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { ready?: boolean } | null) => {
-        if (!cancelled) {
-          setOmrAvailable(Boolean(data?.ready))
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setOmrAvailable(false)
-        }
-      })
-      .finally(() => window.clearTimeout(timer))
-    return () => {
-      cancelled = true
-      controller.abort()
-      window.clearTimeout(timer)
-    }
-  }, [])
-
-  useEffect(() => {
     player.setCallbacks({
       onPosition: handlePosition,
       onStateChange: setPlaying,
@@ -178,9 +157,16 @@ function App() {
     [player],
   )
 
-  const handleScoreError = useCallback((message: string) => {
-    setError(message)
-  }, [])
+  const handleScoreError = useCallback(
+    (message: string) => {
+      setError(message)
+      // The canvas has been cleared, so do not let Play keep sounding the
+      // previous engraving.
+      setAnalysis(null)
+      player.stop()
+    },
+    [player],
+  )
 
   const loadScore = useCallback(
     (xml: string, name: string) => {
@@ -595,6 +581,8 @@ function App() {
         startQ: start.startQ,
         durQ: durationQ,
         midi,
+        step: letter.toUpperCase(),
+        alter: inputAccidental,
       })
       if (typeof result === 'string') {
         setEditError(result)
@@ -659,6 +647,7 @@ function App() {
     const parsed = parseEditableNotes(scoreXml)
     let nextXml = scoreXml
     let changed = false
+    let unmatched = 0
     const seen = new Set<string>()
     for (const item of selections) {
       const key = `${item.measureIndex}:${item.onsetQ}:${item.midi}`
@@ -667,10 +656,14 @@ function App() {
       }
       seen.add(key)
       const note = findEditableNote(parsed, item)
-      if (!note || note.isRest) {
+      if (!note) {
+        unmatched += 1
         continue
       }
-      const result = toggleRest(nextXml, item)
+      if (note.isRest) {
+        continue
+      }
+      const result = deleteNote(nextXml, item)
       if (typeof result === 'string') {
         setEditError(result)
         return
@@ -679,7 +672,11 @@ function App() {
       changed = true
     }
     if (!changed) {
-      setEditError('Nothing to delete — those notes are already rests.')
+      setEditError(
+        unmatched > 0
+          ? 'Could not match that notehead to the score. Click the note again and retry.'
+          : 'Nothing to delete — those notes are already rests.',
+      )
       return
     }
     setEditError(null)
@@ -824,23 +821,26 @@ function App() {
   )
 
   const handleInputNote = useCallback(
-    (input: { measureIndex: number; startQ: number; midi: number }) => {
+    (input: { measureIndex: number; startQ: number; midi: number; step?: string }) => {
       if (!blankMode) {
         return
       }
+      const durationQ = inputDuration * (inputDotted ? 1.5 : 1)
       if (inputRest) {
-        setEditError(
-          'Empty space already shows rests. Choose a note value to write a note, or select a note and use the rest palette.',
-        )
+        // The empty staff already rests here, so clicking simply moves the
+        // write cursor past the rest instead of writing anything.
+        setEditError(null)
+        setInputCursor(cursorAfter(input.measureIndex, input.startQ + durationQ))
         return
       }
-      const durationQ = inputDuration * (inputDotted ? 1.5 : 1)
       const midi = Math.max(24, Math.min(100, input.midi + inputAccidental))
       const result = insertBlankNote(scoreXml, {
         measureIndex: input.measureIndex,
         startQ: input.startQ,
         durQ: durationQ,
         midi,
+        step: input.step,
+        alter: inputAccidental,
       })
       if (typeof result === 'string') {
         setEditError(result)
@@ -1008,33 +1008,12 @@ function App() {
     scoreRef.current?.scrollToTop()
   }, [player])
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement
-      ) {
-        return
-      }
-      if (event.code === 'Space') {
-        event.preventDefault()
-        handleToggle()
-      } else if (event.key === 'Home') {
-        event.preventDefault()
-        handleRestart()
-      } else if (event.key === 'ArrowLeft' && !editMode) {
-        event.preventDefault()
-        player.seek(Math.max(0, player.currentQ() - 1))
-      } else if (event.key === 'ArrowRight' && !editMode) {
-        event.preventDefault()
-        player.seek(player.currentQ() + 1)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [editMode, handleRestart, handleToggle, player])
+  usePlaybackShortcuts({
+    editMode,
+    player,
+    onToggle: handleToggle,
+    onRestart: handleRestart,
+  })
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -1044,6 +1023,7 @@ function App() {
       try {
         if (lower.endsWith('.mid') || lower.endsWith('.midi')) {
           const buffer = await file.arrayBuffer()
+          const { midiToMusicXml } = await import('./music/midiImport')
           const result = midiToMusicXml(
             buffer,
             file.name.replace(/\.[^.]+$/, ''),
@@ -1051,10 +1031,17 @@ function App() {
           loadScore(result.xml, result.title)
           return
         }
-        if (omrAvailable === false && !lower.endsWith('.xml') && !lower.endsWith('.musicxml')) {
-          throw new Error(
-            'Photo/scanned recognition needs the local Audiveris server. This hosted demo supports the built-in examples and MusicXML uploads. Run the project locally for photo OMR.',
-          )
+        if (!lower.endsWith('.xml') && !lower.endsWith('.musicxml')) {
+          let available = omrAvailable
+          if (available === false) {
+            // The backend may have been started after the page loaded.
+            available = await probeOmr()
+          }
+          if (available === false) {
+            throw new Error(
+              'Photo/scanned recognition needs the local Audiveris server. This hosted demo supports the built-in examples and MusicXML uploads. Run the project locally for photo OMR.',
+            )
+          }
         }
         if (lower.endsWith('.xml') || lower.endsWith('.musicxml')) {
           const xml = await file.text()
@@ -1108,7 +1095,7 @@ function App() {
         setStatus('')
       }
     },
-    [loadScore, omrAvailable],
+    [loadScore, omrAvailable, probeOmr],
   )
 
   const handleDemo = useCallback(
@@ -1121,134 +1108,25 @@ function App() {
     [loadScore],
   )
 
-  useEffect(() => {
-    if (!editMode) {
-      return
-    }
-    const durations: Record<string, number> = {
-      '1': 4,
-      '2': 2,
-      '3': 1,
-      '4': 0.5,
-      '5': 0.25,
-    }
-    const noteLetters = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g'])
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      ) {
-        return
-      }
-
-      if (
-        event.key === 'Delete' ||
-        event.key === 'Del' ||
-        event.key === 'Backspace' ||
-        event.code === 'Delete' ||
-        event.code === 'Backspace'
-      ) {
-        // Backspace is the main delete key on Mac keyboards; both delete the
-        // selection, and both are prevented from navigating the page.
-        event.preventDefault()
-        if (selections.length > 0) {
-          handleDeleteSelection()
-        }
-        return
-      }
-
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        if (!selection) {
-          return
-        }
-        event.preventDefault()
-        const direction = event.key === 'ArrowUp' ? 1 : -1
-        handleMovePitch(direction * (event.shiftKey ? 12 : 1))
-        return
-      }
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        event.preventDefault()
-        const direction = event.key === 'ArrowRight' ? 1 : -1
-        if (event.shiftKey) {
-          if (!selection) {
-            return
-          }
-          handleMoveTime(direction * 1)
-        } else {
-          handleNavigate(direction)
-        }
-        return
-      }
-
-      const digit = event.code.match(/^(?:Digit|Numpad)([1-5])$/)?.[1]
-      if (digit) {
-        event.preventDefault()
-        const value = durations[digit]
-        if (event.shiftKey) {
-          setInputDuration(value)
-          setInputRest(true)
-          if (blankMode) {
-            insertRestAtCursor(value)
-          } else {
-            handleRestDuration(value)
-          }
-        } else {
-          if (blankMode) {
-            setInputDuration(value)
-            setInputRest(false)
-          } else {
-            handleNoteDuration(value)
-          }
-        }
-        return
-      }
-
-      const key = event.key.toLowerCase()
-      if (blankMode && noteLetters.has(key)) {
-        event.preventDefault()
-        insertKeyboardNote(key)
-        return
-      }
-      if (key === 'z' || key === 'x') {
-        event.preventDefault()
-        const direction = key === 'z' ? -1 : 1
-        if (blankMode) {
-          setInputOctave((previous) =>
-            Math.max(2, Math.min(6, previous + direction)),
-          )
-        } else if (selection) {
-          handleTranspose(direction * 12)
-        }
-        return
-      }
-      if (event.key === '.') {
-        event.preventDefault()
-        handleDot()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [
-    blankMode,
+  useEditorShortcuts({
     editMode,
-    handleDeleteSelection,
-    handleDot,
-    handleMovePitch,
-    handleMoveTime,
-    handleNavigate,
-    handleNoteDuration,
-    handleRestDuration,
-    handleTranspose,
-    insertKeyboardNote,
-    insertRestAtCursor,
+    blankMode,
     selection,
     selections,
-  ])
+    onDeleteSelection: handleDeleteSelection,
+    onMovePitch: handleMovePitch,
+    onMoveTime: handleMoveTime,
+    onNavigate: handleNavigate,
+    onNoteDuration: handleNoteDuration,
+    onRestDuration: handleRestDuration,
+    onTranspose: handleTranspose,
+    onDot: handleDot,
+    insertKeyboardNote,
+    insertRestAtCursor,
+    setInputDuration,
+    setInputRest,
+    setInputOctave,
+  })
 
   const position = useMemo(
     () => (analysis ? describePosition(analysis, q) : null),
@@ -1549,6 +1427,7 @@ function App() {
             onFile={handleFile}
             onDemo={handleDemo}
             onBlank={startBlankStaff}
+            onRetryOmr={refreshOmr}
             onClearError={() => setError(null)}
           />
           <Controls

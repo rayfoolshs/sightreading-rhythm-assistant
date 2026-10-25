@@ -28,3 +28,7 @@ dist-ssr
 
 # Python virtualenv
 .venv
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -3,19 +3,20 @@ import {
   memo,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react'
-import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay'
+import type { OpenSheetMusicDisplay } from 'opensheetmusicdisplay'
 import { analyzeScore } from '../music/analyze'
-import { kodalyForNote, pulseUnitQ } from '../music/counting'
+import { inputCursorPosition, resolveInputPosition } from '../music/geometry'
+import { buildLabelsForStyle, type LabelItem } from '../music/labels'
 import type {
   MeasureLayout,
   NoteHead,
   NoteSelection,
   RestHead,
   ScoreAnalysis,
-  VisualStep,
 } from '../music/types'
 
 export interface ScoreViewHandle {
@@ -39,6 +40,7 @@ interface ScoreViewProps {
     measureIndex: number
     startQ: number
     midi: number
+    step?: string
   }) => void
   onAnalysis: (analysis: ScoreAnalysis) => void
   onError: (message: string) => void
@@ -66,8 +68,15 @@ function firstTimeSignature(
   }
 }
 
-function beamGroupsFor(beats: number, beatType: number): number[][] | null {
-  if (!beats || !beatType) {
+function scrollBehavior(): ScrollBehavior {
+  const reduced =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return reduced ? 'auto' : 'smooth'
+}
+
+function beamGroupsFor(beats: number, beatType: number): number[][] | null {  if (!beats || !beatType) {
     return null
   }
   const compound = beatType === 8 && beats > 3 && beats % 3 === 0
@@ -83,166 +92,6 @@ function beamGroupsFor(beats: number, beatType: number): number[][] | null {
     return null
   }
   return Array.from({ length: beats }, () => unit)
-}
-
-function labelY(analysis: ScoreAnalysis, step: VisualStep): number {
-  const staffIndex = step.staffIndex ?? 0
-  const current = analysis.staffLayouts.find(
-    (layout) =>
-      layout.measureIndex === step.measureIndex &&
-      layout.staffIndex === staffIndex,
-  )
-  if (!current) {
-    return step.y + step.height + 32
-  }
-  const next = analysis.staffLayouts.find(
-    (layout) =>
-      layout.measureIndex === step.measureIndex &&
-      layout.staffIndex === staffIndex + 1,
-  )
-  let offset = 32
-  if (next && next.staffTopY > current.staffBottomY) {
-    const gap = next.staffTopY - current.staffBottomY
-    offset = Math.max(8, Math.min(32, gap - 26))
-  }
-  return current.staffBottomY + offset
-}
-
-function labelSteps(analysis: ScoreAnalysis): VisualStep[] {
-  return analysis.staffSteps.length > 0
-    ? analysis.staffSteps
-    : analysis.steps
-}
-
-function buildKodalyLabels(analysis: ScoreAnalysis): LabelItem[] {
-  const labels: LabelItem[] = []
-  const seen = new Set<string>()
-  for (const step of labelSteps(analysis)) {
-    if (!step.hasNotes || step.noteHeads.length === 0) {
-      continue
-    }
-    const staffIndex = step.staffIndex ?? 0
-    const key = `${staffIndex}:${step.measureIndex}:${Math.round(step.q * 1000)}`
-    if (seen.has(key)) {
-      continue
-    }
-    seen.add(key)
-    labels.push({
-      q: step.q,
-      x: step.x,
-      y: labelY(analysis, step),
-      text: kodalyForNote(step.durationQ, step.relQ, step.timeSignature),
-      compact: false,
-      range: false,
-      staffIndex,
-    })
-  }
-  labels.sort((a, b) => a.q - b.q)
-  return labels
-}
-
-interface LabelItem {
-  q: number
-  x: number
-  y: number
-  text: string
-  compact: boolean
-  range: boolean
-  staffIndex: number
-}
-
-function buildLabels(analysis: ScoreAnalysis): LabelItem[] {
-  const measures = new Map(
-    analysis.measures.map((measure) => [measure.index, measure]),
-  )
-  const groups = new Map<string, VisualStep[]>()
-  const seen = new Set<string>()
-
-  for (const step of labelSteps(analysis)) {
-    if (!step.hasNotes || step.noteHeads.length === 0) {
-      continue
-    }
-    const measure = measures.get(step.measureIndex)
-    if (!measure) {
-      continue
-    }
-    const staffIndex = step.staffIndex ?? 0
-    const dedupeKey = `${staffIndex}:${step.measureIndex}:${Math.round(step.q * 1000)}`
-    if (seen.has(dedupeKey)) {
-      continue
-    }
-    seen.add(dedupeKey)
-    const unit = pulseUnitQ(measure.timeSignature)
-    const beatIndex = Math.floor(step.relQ / unit + 0.0001)
-    const key = `${staffIndex}:${measure.index}:${beatIndex}`
-    const group = groups.get(key)
-    if (group) {
-      group.push(step)
-    } else {
-      groups.set(key, [step])
-    }
-  }
-
-  const labels: LabelItem[] = []
-  for (const steps of groups.values()) {
-    steps.sort((a, b) => a.q - b.q)
-    const first = steps[0]
-    const measure = measures.get(first.measureIndex)
-    if (!measure) {
-      continue
-    }
-    const unit = pulseUnitQ(measure.timeSignature)
-    const beatIndex = Math.floor(first.relQ / unit + 0.0001)
-    const beatStartQ = measure.startQ + beatIndex * unit
-    const hasBeatStartNote = steps.some(
-      (step) => Math.abs(step.q - beatStartQ) < 0.0001,
-    )
-    let firstSubdivision = true
-
-    for (const step of steps) {
-      const label = step.label
-      let text = label.text
-      let compact = false
-      let range = false
-      if (label.syllable) {
-        if (hasBeatStartNote || !firstSubdivision) {
-          text = label.syllable
-          compact = true
-        } else {
-          firstSubdivision = false
-        }
-      } else if (step.durationQ > 0) {
-        const beats = step.durationQ / unit
-        const rounded = Math.round(beats)
-        if (rounded >= 2 && Math.abs(beats - rounded) < 0.01) {
-          const end = Math.min(
-            measure.timeSignature.beats,
-            label.beatNumber + rounded - 1,
-          )
-          if (end > label.beatNumber) {
-            const values: string[] = []
-            for (let value = label.beatNumber; value <= end; value += 1) {
-              values.push(String(value))
-            }
-            text = values.join(' ')
-            compact = true
-            range = true
-          }
-        }
-      }
-      labels.push({
-        q: step.q,
-        x: step.x,
-        y: labelY(analysis, step),
-        text,
-        compact,
-        range,
-        staffIndex: step.staffIndex ?? 0,
-      })
-    }
-  }
-  labels.sort((a, b) => a.q - b.q)
-  return labels
 }
 
 const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
@@ -271,16 +120,23 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
     const analysisRef = useRef<ScoreAnalysis | null>(null)
     const layoutRef = useRef<MeasureLayout[]>([])
     const styleRef = useRef(countingStyle)
-    styleRef.current = countingStyle
     const activeLabelsRef = useRef<Set<HTMLDivElement>>(new Set())
     const [labels, setLabels] = useState<LabelItem[]>([])
     const [noteHeads, setNoteHeads] = useState<NoteHead[]>([])
     const [restHeads, setRestHeads] = useState<RestHead[]>([])
+    const [renderAnalysis, setRenderAnalysis] = useState<ScoreAnalysis | null>(
+      null,
+    )
+    const [renderLayouts, setRenderLayouts] = useState<MeasureLayout[]>([])
     const [inputGhost, setInputGhost] = useState<{
       x: number
       y: number
     } | null>(null)
     const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+      styleRef.current = countingStyle
+    }, [countingStyle])
 
     useEffect(() => {
       let cancelled = false
@@ -292,6 +148,8 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
       setLabels([])
       setNoteHeads([])
       setRestHeads([])
+      setRenderAnalysis(null)
+      setRenderLayouts([])
       layoutRef.current = []
       analysisRef.current = null
       host.replaceChildren()
@@ -301,56 +159,58 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
         ? beamGroupsFor(timeSignature.beats, timeSignature.beatType)
         : null
 
-      const osmd = new OpenSheetMusicDisplay(host, {
-        backend: 'svg',
-        autoResize: false,
-        drawTitle: true,
-        drawSubtitle: true,
-        drawComposer: false,
-        drawCredits: false,
-        drawPartNames: false,
-        drawMeasureNumbers: true,
-        drawMeasureNumbersOnlyAtSystemStart: true,
-        autoBeam: true,
-        autoBeamOptions: {
-          beam_rests: false,
-          beam_middle_rests_only: true,
-          groups: (beamGroups ?? undefined) as [number[]] | undefined,
-        },
-        followCursor: false,
-        pageFormat: 'Endless',
-        renderSingleHorizontalStaffline: false,
-      })
-      osmd.Zoom = 0.86
-      osmd.FollowCursor = false
+      let osmd: OpenSheetMusicDisplay | null = null
 
       const load = async () => {
         try {
-          await osmd.load(xml)
+          const { OpenSheetMusicDisplay: Engraver } = await import(
+            'opensheetmusicdisplay'
+          )
           if (cancelled) {
             return
           }
-          osmd.render()
+          const engraver = new Engraver(host, {
+            backend: 'svg',
+            autoResize: false,
+            drawTitle: true,
+            drawSubtitle: true,
+            drawComposer: false,
+            drawCredits: false,
+            drawPartNames: false,
+            drawMeasureNumbers: true,
+            drawMeasureNumbersOnlyAtSystemStart: true,
+            autoBeam: true,
+            autoBeamOptions: {
+              beam_rests: false,
+              beam_middle_rests_only: true,
+              groups: (beamGroups ?? undefined) as [number[]] | undefined,
+            },
+            followCursor: false,
+            pageFormat: 'Endless',
+            renderSingleHorizontalStaffline: false,
+          })
+          osmd = engraver
+          engraver.Zoom = 0.86
+          engraver.FollowCursor = false
+          await engraver.load(xml)
           if (cancelled) {
             return
           }
-          const analysis = analyzeScore(osmd, host)
+          engraver.render()
+          if (cancelled) {
+            return
+          }
+          const analysis = analyzeScore(engraver, host)
           if (cancelled) {
             return
           }
           analysisRef.current = analysis
-          setLabels(
-            styleRef.current === 'kodaly'
-              ? buildKodalyLabels(analysis)
-              : buildLabels(analysis),
-          )
+          setLabels(buildLabelsForStyle(analysis, styleRef.current))
           layoutRef.current = analysis.layout
-          setNoteHeads(
-            analysis.steps.flatMap((step) => step.noteHeads),
-          )
-          setRestHeads(
-            analysis.steps.flatMap((step) => step.restHeads),
-          )
+          setRenderAnalysis(analysis)
+          setRenderLayouts(analysis.layout)
+          setNoteHeads(analysis.steps.flatMap((step) => step.noteHeads))
+          setRestHeads(analysis.steps.flatMap((step) => step.restHeads))
           setLoading(false)
           onAnalysis(analysis)
         } catch (error) {
@@ -369,7 +229,7 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
       return () => {
         cancelled = true
         try {
-          osmd.clear()
+          osmd?.clear()
         } catch {
           // Ignore cleanup issues from a half-initialized OSMD instance.
         }
@@ -387,59 +247,11 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
         return null
       }
       const rect = canvas.getBoundingClientRect()
-      const x = clientX - rect.left
-      const y = clientY - rect.top
-      const layout = layoutRef.current.find(
-        (item) =>
-          x >= item.x - 4 &&
-          x <= item.x + item.width + 4 &&
-          y >= item.staffTopY - 55 &&
-          y <= item.staffBottomY + 55,
+      return resolveInputPosition(
+        { x: clientX - rect.left, y: clientY - rect.top },
+        layoutRef.current,
+        analysis.measures,
       )
-      if (!layout) {
-        return null
-      }
-      const measure = analysis.measures.find(
-        (item) => item.index === layout.measureIndex,
-      )
-      if (!measure) {
-        return null
-      }
-      const startX = Math.min(
-        layout.contentStartX,
-        layout.x + layout.width - 10,
-      )
-      const endX = layout.x + layout.width - 3
-      const relative =
-        endX > startX
-          ? Math.max(0, Math.min(1, (x - startX) / (endX - startX)))
-          : 0
-      let startQ = Math.round((relative * measure.durationQ) / 0.25) * 0.25
-      startQ = Math.max(0, Math.min(measure.durationQ - 0.25, startQ))
-      const halfSpace = (layout.staffBottomY - layout.staffTopY) / 8
-      if (halfSpace <= 0) {
-        return null
-      }
-      const steps = Math.round((layout.staffBottomY - y) / halfSpace)
-      const semitones = [0, 2, 4, 5, 7, 9, 11]
-      const diatonic = 4 * 7 + 2 + steps
-      const octave = Math.floor(diatonic / 7)
-      const letter = ((diatonic % 7) + 7) % 7
-      const midi = (octave + 1) * 12 + semitones[letter]
-      if (midi < 24 || midi > 100) {
-        return null
-      }
-      const snappedX =
-        startX +
-        (startQ / Math.max(0.25, measure.durationQ)) * (endX - startX)
-      const snappedY = layout.staffBottomY - steps * halfSpace
-      return {
-        measureIndex: measure.index,
-        startQ,
-        midi,
-        x: snappedX,
-        y: snappedY,
-      }
     }
 
     const handleInputClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -451,6 +263,7 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
         measureIndex: resolved.measureIndex,
         startQ: resolved.startQ,
         midi: resolved.midi,
+        step: resolved.step,
       })
     }
 
@@ -481,11 +294,7 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
       if (!analysis) {
         return
       }
-      setLabels(
-        countingStyle === 'kodaly'
-          ? buildKodalyLabels(analysis)
-          : buildLabels(analysis),
-      )
+      setLabels(buildLabelsForStyle(analysis, countingStyle))
     }, [countingStyle])
 
     useImperativeHandle(ref, () => ({
@@ -580,7 +389,7 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
         }
       },
       scrollToTop() {
-        viewportRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+        viewportRef.current?.scrollTo({ top: 0, behavior: scrollBehavior() })
       },
       focusSelection(target: NoteSelection) {
         const viewport = viewportRef.current
@@ -605,40 +414,21 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
         }
         viewport.scrollTo({
           top: Math.max(0, head.y - viewport.clientHeight * 0.4),
-          behavior: 'smooth',
+          behavior: scrollBehavior(),
         })
       },
     }))
 
-    const cursorPosition = (() => {
-      if (!inputEnabled || !inputCursor) {
+    const cursorPosition = useMemo(() => {
+      if (!inputEnabled || !inputCursor || !renderAnalysis) {
         return null
       }
-      const analysis = analysisRef.current
-      const layout = layoutRef.current.find(
-        (item) => item.measureIndex === inputCursor.measureIndex,
+      return inputCursorPosition(
+        inputCursor,
+        renderLayouts,
+        renderAnalysis.measures,
       )
-      const measure = analysis?.measures.find(
-        (item) => item.index === inputCursor.measureIndex,
-      )
-      if (!layout || !measure) {
-        return null
-      }
-      const startX = Math.min(
-        layout.contentStartX,
-        layout.x + layout.width - 10,
-      )
-      const endX = layout.x + layout.width - 3
-      const x =
-        startX +
-        (inputCursor.startQ / Math.max(0.25, measure.durationQ)) *
-          (endX - startX)
-      return {
-        x,
-        top: layout.staffTopY,
-        height: Math.max(24, layout.staffBottomY - layout.staffTopY),
-      }
-    })()
+    }, [inputCursor, inputEnabled, renderAnalysis, renderLayouts])
 
     return (
       <div className="score-shell">
@@ -703,6 +493,7 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
                       type="button"
                       className={`note-hit ${selected ? 'is-selected' : ''}`}
                       style={{ left: head.x, top: head.y }}
+                      tabIndex={-1}
                       onClick={(event) =>
                         onSelectNote(
                           {
@@ -733,6 +524,7 @@ const ScoreViewInner = forwardRef<ScoreViewHandle, ScoreViewProps>(
                           selected ? 'is-selected' : ''
                         }`}
                         style={{ left: head.x, top: head.y }}
+                        tabIndex={-1}
                         onClick={() =>
                           onSelectNote(
                             {

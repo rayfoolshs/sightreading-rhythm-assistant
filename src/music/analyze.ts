@@ -90,6 +90,9 @@ export function analyzeScore(
 
   const stepsByQ = new Map<number, VisualStep>()
   const notesByQ = new Map<number, Map<string, NoteEvent>>()
+  // Tied notes arrive as separate cursor steps; map each tie back to the note
+  // event it started so the playback duration covers the whole tie chain.
+  const tiedEvents = new WeakMap<object, NoteEvent>()
   const gridTicks = new Map<number, number>()
   const beamIds = new WeakMap<object, number>()
   let nextBeamId = 1
@@ -253,6 +256,15 @@ export function analyzeScore(
           continue
         }
         if (source.NoteTie && source.NoteTie.StartNote !== source) {
+          const tieDuration = source.Length.RealValue * 4
+          const startEvent = tiedEvents.get(source.NoteTie)
+          if (
+            startEvent &&
+            Number.isFinite(tieDuration) &&
+            tieDuration > 0
+          ) {
+            startEvent.durQ += tieDuration
+          }
           continue
         }
         const durQ = source.Length.RealValue * 4
@@ -300,14 +312,18 @@ export function analyzeScore(
             }
           }
         }
-        notesAtQ.set(noteKey(graphicalNote), {
+        const noteEvent: NoteEvent = {
           q,
           durQ,
           frequency,
           isRest: false,
           measureIndex,
           velocity: 0.75,
-        })
+        }
+        notesAtQ.set(noteKey(graphicalNote), noteEvent)
+        if (source.NoteTie) {
+          tiedEvents.set(source.NoteTie, noteEvent)
+        }
       }
     }
 

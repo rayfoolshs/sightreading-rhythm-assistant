@@ -8,6 +8,13 @@ and an optional shuffle feel.
 Do not ask clarifying questions. Make reasonable choices and deliver a working
 app matching the acceptance tests at the end.
 
+> **Implementation status:** this is the original build brief, kept for design
+> intent. See [BUILD_PLAN.md](BUILD_PLAN.md) for what shipped and current
+> limitations. Since v1.1 the implementation added unit tests (`npm test`),
+> key-aware flat/sharp spelling, tie-aware playback durations, chord-member and
+> tied-note deletion, an error boundary, accessibility fixes, and lazy-loaded
+> OSMD/MIDI chunks; the deviations are noted inline below.
+
 ---
 
 ## Product summary
@@ -196,7 +203,8 @@ For each cursor step until `cursor.iterator.EndReached`:
   collecting later notation. Repeats are intentionally ignored.
 - For each sounding note:
   - Skip rests.
-  - Skip tied continuations: `source.NoteTie.StartNote !== source`.
+  - Tie continuations are skipped as steps, but their segment duration is added
+    to the event that started the tie, so playback sustains the whole chain.
   - Duration = `source.Length.RealValue * 4`.
   - Frequency = `source.Pitch.Frequency`.
   - Record `{ q, durQ, frequency, measureIndex, velocity: 0.75 }`.
@@ -560,8 +568,9 @@ Show an input status panel: current octave, bar/beat, and the shortcut summary.
 
 ## 11. Acceptance tests
 
-1. `npm run build` and `npm run lint` pass.
-2. App opens with the Counting Warm-Up demo and counts 1–8 measures.
+1. `npm run build`, `npm run lint`, and `npm test` pass.
+2. App opens with the default Prelude in G Harmonic Minor (the Counting Warm-Up
+   and Compound Time Etude are available as samples).
 3. Beaming:
    - 4/4 eighth pairs are connected by beams; sixteenths are connected with
      double beams.
@@ -588,9 +597,11 @@ Show an input status panel: current octave, bar/beat, and the shortcut summary.
     - empty measures show whole rests and hidden anchors keep the layout;
     - clicking the staff adds a note at the clicked pitch/beat;
     - typing A–G adds notes at the moving cursor; 1–5 changes length;
-    - Shift+1–5 enters rests; Z/X changes octave;
+    - Shift+1–5 leaves a rest and advances the cursor; Z/X changes octave;
     - the new note gets a count label and can be selected/edited;
     - Delete and Backspace both replace a selected note/range with equivalent rests;
+    - deleting a chord member removes only that notehead, and deleting the base
+      note promotes the next member; deleting a tied note clears every segment;
     - Shift-click highlights a range and Delete clears it;
     - ←/→ steps through notes and plays each one;
     - ↑/↓ transposes the selected note and plays it;
@@ -613,22 +624,40 @@ src/
   App.css
   index.css
   main.tsx
+  api/
+    omr.ts               health probe client
   components/
-    ScoreView.tsx        OSMD load/render, analysis, labels, playhead, scroll
+    ScoreView.tsx        OSMD load/render, labels, playhead, scroll
     CountDisplay.tsx     big current-count card
     Controls.tsx         transport, tempo, shuffle, metronome, loop, volume
     LoadPanel.tsx        upload/dropzone, samples, OMR status
+    EditorPanel.tsx      selected-note inspector and editor hints
+    NotationPalette.tsx  note/rest/accidental/meter palette
+    ErrorBoundary.tsx    recover from engrave/render failures
+  hooks/
+    useOmrHealth.ts      backend availability and re-check
+    usePlaybackShortcuts.ts
+    useEditorShortcuts.ts
   music/
     analyze.ts           cursor walk → timeline, measures, beats, positions
     counting.ts          count labels, beat grids, live position description
+    labels.ts            counting-label placement and grouping
+    geometry.ts          score click → snapped note position
+    spelling.ts          flat/sharp spelling for edits and MIDI import
+    musicxmlEditor.ts    MusicXML note lookup and edits
+    blankScore.ts        blank-staff generation and note writing
+    midiImport.ts        MIDI → MusicXML
     player.ts            lookahead scheduler, seek/loop/tempo/shuffle
     audio.ts             Web Audio synth + metronome
     demo.ts              built-in MusicXML (with explicit beams)
     types.ts             shared types
+    *.test.ts            Vitest suites for the pure music modules
 server/
   main.py                FastAPI OMR endpoint + health + static hosting
   requirements.txt
 README.md
+BUILD_PLAN.md
+BUILD_PROMPT.md
 ```
 
 ## 13. Constraints

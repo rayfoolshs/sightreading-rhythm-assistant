@@ -1,5 +1,6 @@
 import type { NoteSelection } from './types'
 import { durationType, parseEditableNotes } from './musicxmlEditor'
+import { fitsSpelling, octaveFor, spellMidi } from './spelling'
 
 export interface TimeSignatureValue {
   beats: number
@@ -11,24 +12,12 @@ export interface BlankNoteInput {
   startQ: number
   durQ: number
   midi: number
+  /** Preferred written letter, so flats survive a round-trip. */
+  step?: string
+  alter?: number
 }
 
 export const BLANK_MEASURE_COUNT = 8
-
-const SPELLINGS: Array<[string, number]> = [
-  ['C', 0],
-  ['C', 1],
-  ['D', 0],
-  ['D', 1],
-  ['E', 0],
-  ['F', 0],
-  ['F', 1],
-  ['G', 0],
-  ['G', 1],
-  ['A', 0],
-  ['A', 1],
-  ['B', 0],
-]
 
 const REST_VALUES = [4, 2, 1, 0.5, 0.25, 0.125]
 
@@ -64,11 +53,17 @@ export function meterFromXml(xml: string): TimeSignatureValue {
   }
 }
 
-function pitchXml(midi: number): string {
-  const [step, alter] = SPELLINGS[((midi % 12) + 12) % 12]
-  const octave = Math.floor(midi / 12) - 1
-  const alterXml = alter === 0 ? '' : `<alter>${alter}</alter>`
-  return `<pitch><step>${step}</step>${alterXml}<octave>${octave}</octave></pitch>`
+function pitchXml(note: BlankNoteInput): string {
+  const spelling =
+    note.step !== undefined &&
+    note.alter !== undefined &&
+    fitsSpelling(note.midi, note.step, note.alter)
+      ? { step: note.step, alter: note.alter }
+      : spellMidi(note.midi)
+  const octave = octaveFor(note.midi, spelling.step, spelling.alter)
+  const alterXml =
+    spelling.alter === 0 ? '' : `<alter>${spelling.alter}</alter>`
+  return `<pitch><step>${spelling.step}</step>${alterXml}<octave>${octave}</octave></pitch>`
 }
 
 function typeXml(durationQ: number): string {
@@ -81,7 +76,7 @@ function typeXml(durationQ: number): string {
 
 function noteXml(note: BlankNoteInput): string {
   const duration = Math.round(note.durQ * 8)
-  return `<note>${pitchXml(note.midi)}<duration>${duration}</duration><voice>1</voice>${typeXml(note.durQ)}</note>`
+  return `<note>${pitchXml(note)}<duration>${duration}</duration><voice>1</voice>${typeXml(note.durQ)}</note>`
 }
 
 function restXml(durationQ: number): string {
@@ -113,10 +108,18 @@ function emptyMeasureAnchors(meter: TimeSignatureValue): string {
   const count = Math.max(1, Math.round(total / unit))
   const duration = Math.round(unit * 8)
   const type = typeXml(unit)
+  const anchorPitch = pitchXml({
+    measureIndex: 0,
+    startQ: 0,
+    durQ: unit,
+    midi: 71,
+    step: 'B',
+    alter: 0,
+  })
   const anchors = Array.from(
     { length: count },
     () =>
-      `<note print-object="no">${pitchXml(71)}<duration>${duration}</duration><voice>2</voice>${type}</note>`,
+      `<note print-object="no">${anchorPitch}<duration>${duration}</duration><voice>2</voice>${type}</note>`,
   ).join('')
   return `<note><rest measure="yes"/><duration>${Math.round(total * 8)}</duration><voice>1</voice><type>whole</type></note><backup><duration>${Math.round(total * 8)}</duration></backup>${anchors}`
 }
@@ -172,12 +175,24 @@ export function createBlankMusicXml(
 export function notesFromBlankXml(xml: string): BlankNoteInput[] {
   return parseEditableNotes(xml)
     .filter((note) => !note.isRest && note.midi !== null)
-    .map((note) => ({
-      measureIndex: note.measureIndex,
-      startQ: note.onsetQ,
-      durQ: note.durationQ,
-      midi: note.midi as number,
-    }))
+    .map((note) => {
+      const pitch = Array.from(note.element.children).find(
+        (child) => child.tagName === 'pitch',
+      )
+      const step = pitch
+        ?.getElementsByTagName('step')[0]
+        ?.textContent?.trim()
+      const alterText = pitch?.getElementsByTagName('alter')[0]?.textContent
+      const parsedAlter = alterText === undefined ? 0 : Number(alterText)
+      return {
+        measureIndex: note.measureIndex,
+        startQ: note.onsetQ,
+        durQ: note.durationQ,
+        midi: note.midi as number,
+        step: step || undefined,
+        alter: Number.isFinite(parsedAlter) ? parsedAlter : 0,
+      }
+    })
 }
 
 export function insertBlankNote(

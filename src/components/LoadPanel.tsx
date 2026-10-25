@@ -10,6 +10,7 @@ interface LoadPanelProps {
   onFile: (file: File) => void
   onDemo: (id: string) => void
   onBlank: () => void
+  onRetryOmr: () => void
   onClearError: () => void
 }
 
@@ -22,6 +23,7 @@ export function LoadPanel({
   onFile,
   onDemo,
   onBlank,
+  onRetryOmr,
   onClearError,
 }: LoadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -104,6 +106,9 @@ export function LoadPanel({
         <div className="hosted-note">
           Photo recognition is offline in this hosted build. Use a sample, MusicXML,
           or MIDI file. Run the app locally for Audiveris OMR.
+          <button type="button" className="hosted-retry" onClick={onRetryOmr}>
+            Check again
+          </button>
         </div>
       )}
 

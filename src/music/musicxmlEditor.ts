@@ -1,4 +1,14 @@
+import {
+  midiFromPitch,
+  octaveFor,
+  preferFromFifths,
+  spellMidi,
+  transposeSpelling,
+  type PitchSpelling,
+} from './spelling'
 import type { NoteSelection } from './types'
+
+export { midiFromPitch } from './spelling'
 
 export interface EditableNote {
   measureIndex: number
@@ -21,31 +31,6 @@ export interface EditResult {
   xml: string
   selection: NoteSelection
 }
-
-const STEP_SEMITONES: Record<string, number> = {
-  C: 0,
-  D: 2,
-  E: 4,
-  F: 5,
-  G: 7,
-  A: 9,
-  B: 11,
-}
-
-const MIDI_SPELLINGS: Array<[string, number]> = [
-  ['C', 0],
-  ['C', 1],
-  ['D', 0],
-  ['D', 1],
-  ['E', 0],
-  ['F', 0],
-  ['F', 1],
-  ['G', 0],
-  ['G', 1],
-  ['A', 0],
-  ['A', 1],
-  ['B', 0],
-]
 
 const DURATION_TYPES: Array<[string, number]> = [
   ['whole', 4],
@@ -73,20 +58,11 @@ function hasChild(element: Element, name: string): boolean {
   return directChildren(element, name).length > 0
 }
 
-export function midiFromPitch(
-  step: string,
-  alter: number,
-  octave: number,
-): number {
-  const semitone = STEP_SEMITONES[step]
-  if (semitone === undefined) {
-    return 60
-  }
-  return (octave + 1) * 12 + semitone + alter
-}
-
-export function noteNameFromMidi(midi: number): string {
-  const [step, alter] = MIDI_SPELLINGS[((midi % 12) + 12) % 12]
+export function noteNameFromMidi(
+  midi: number,
+  spelling?: PitchSpelling,
+): string {
+  const { step, alter } = spelling ?? spellMidi(midi)
   const octave = Math.floor(midi / 12) - 1
   const accidental = alter === 1 ? '♯' : alter === -1 ? '♭' : ''
   return `${step}${accidental}${octave}`
@@ -209,6 +185,50 @@ function chordMembers(notes: EditableNote[], note: EditableNote): EditableNote[]
   )
 }
 
+function hasTie(element: Element, type: 'start' | 'stop'): boolean {
+  const direct = directChildren(element, 'tie').some(
+    (tie) => tie.getAttribute('type') === type,
+  )
+  if (direct) {
+    return true
+  }
+  return Array.from(element.getElementsByTagName('tied')).some(
+    (tie) => tie.getAttribute('type') === type,
+  )
+}
+
+/**
+ * Follow a tie chain forward. MusicXML writes one `<note>` per tied segment,
+ * so deleting only the first segment leaves the rest of the note on screen.
+ */
+function tieChain(notes: EditableNote[], note: EditableNote): EditableNote[] {
+  if (note.isRest || !hasTie(note.element, 'start')) {
+    return [note]
+  }
+  const chain = [note]
+  let current = note
+  while (hasTie(current.element, 'start')) {
+    const index = notes.indexOf(current)
+    const next = notes
+      .slice(index + 1)
+      .find(
+        (candidate) =>
+          candidate.partIndex === current.partIndex &&
+          candidate.voice === current.voice &&
+          candidate.staff === current.staff &&
+          candidate.midi === current.midi &&
+          !candidate.isRest &&
+          hasTie(candidate.element, 'stop'),
+      )
+    if (!next || chain.includes(next)) {
+      break
+    }
+    chain.push(next)
+    current = next
+  }
+  return chain
+}
+
 function serialize(document: Document): string {
   const xml = new XMLSerializer().serializeToString(document)
   return xml.startsWith('<?xml')
@@ -230,14 +250,18 @@ export function validateMusicXml(xml: string): string | null {
   return null
 }
 
-function updatePitchElement(element: Element, midi: number): void {
+function updatePitchElement(
+  element: Element,
+  midi: number,
+  spelling: PitchSpelling = spellMidi(midi),
+): void {
   directChildren(element, 'pitch').forEach((pitch) => pitch.remove())
   directChildren(element, 'unpitched').forEach((pitch) => pitch.remove())
   directChildren(element, 'accidental').forEach((pitch) => pitch.remove())
   directChildren(element, 'rest').forEach((rest) => rest.remove())
 
-  const [step, alter] = MIDI_SPELLINGS[((midi % 12) + 12) % 12]
-  const octave = Math.floor(midi / 12) - 1
+  const { step, alter } = spelling
+  const octave = octaveFor(midi, step, alter)
   const pitch = element.ownerDocument.createElement('pitch')
   const stepElement = element.ownerDocument.createElement('step')
   stepElement.textContent = step
@@ -346,17 +370,41 @@ export function transposeNote(
     return 'Could not find that note in the score.'
   }
   const midi = Math.max(0, Math.min(127, note.midi + semitones))
+  const preference = preferFromFifths(keyFifthsFromXml(xml))
   return withDocument(xml, (document) => {
     const element = findElementByNote(document, note)
     if (!element) {
       return 'Could not find that note in the score.'
     }
-    updatePitchElement(element, midi)
+    const pitch = directChildren(note.element, 'pitch')[0]
+    const spelling = transposeSpelling(
+      childText(pitch, 'step') || 'C',
+      childNumber(pitch, 'alter'),
+      note.midi as number,
+      semitones,
+      preference,
+    )
+    updatePitchElement(element, midi, spelling)
     return {
       xml: serialize(document),
       selection: { ...selection, midi },
     }
   })
+}
+
+/** The first key signature in the score, in fifths (-7 flats … +7 sharps). */
+export function keyFifthsFromXml(xml: string): number {
+  try {
+    const document = new DOMParser().parseFromString(xml, 'application/xml')
+    const fifths = document.getElementsByTagName('fifths')[0]
+    if (!fifths) {
+      return 0
+    }
+    const value = Number(fifths.textContent)
+    return Number.isFinite(value) ? value : 0
+  } catch {
+    return 0
+  }
 }
 
 function findElementByNote(
@@ -464,7 +512,7 @@ export function toggleRest(
       return 'Could not find that note in the score.'
     }
     if (note.isRest) {
-      updatePitchElement(element, 60)
+      updatePitchElement(element, 60, { step: 'C', alter: 0 })
       return {
         xml: serialize(document),
         selection: { ...selection, midi: 60 },
@@ -474,6 +522,73 @@ export function toggleRest(
     return {
       xml: serialize(document),
       selection: { ...selection, midi: null },
+    }
+  })
+}
+
+/**
+ * Delete one notehead. A standalone note becomes a rest so the bar keeps its
+ * length; a chord member is removed from the chord, and if it was the first
+ * member the next one is promoted to be the chord's base note.
+ */
+export function deleteNote(
+  xml: string,
+  selection: NoteSelection,
+): EditResult | string {
+  const notes = parseEditableNotes(xml)
+  const note = findEditableNote(notes, selection)
+  if (!note) {
+    return 'Could not match that notehead to the score. Click the note again and retry.'
+  }
+  if (note.isRest) {
+    return 'That is already a rest.'
+  }
+  const members = chordMembers(notes, note)
+  const others = members.filter((member) => member !== note)
+  const chain = members.length <= 1 ? tieChain(notes, note) : [note]
+  return withDocument(xml, (document) => {
+    const element = findElementByNote(document, note)
+    if (!element) {
+      return 'Could not match that notehead to the score. Click the note again and retry.'
+    }
+
+    if (chain.length > 1) {
+      for (const segment of chain) {
+        const segmentElement = findElementByNote(document, segment)
+        if (segmentElement) {
+          makeRest(segmentElement)
+        }
+      }
+      return {
+        xml: serialize(document),
+        selection: { ...selection, midi: null },
+      }
+    }
+
+    const remaining = others[0]
+    if (members.length <= 1 || !remaining) {
+      makeRest(element)
+      return {
+        xml: serialize(document),
+        selection: { ...selection, midi: null },
+      }
+    }
+
+    const wasBaseNote = !hasChild(element, 'chord')
+    element.remove()
+    if (wasBaseNote) {
+      const promoted = findElementByNote(document, remaining)
+      if (promoted) {
+        directChildren(promoted, 'chord').forEach((child) => child.remove())
+      }
+    }
+    return {
+      xml: serialize(document),
+      selection: {
+        measureIndex: remaining.measureIndex,
+        onsetQ: remaining.onsetQ,
+        midi: remaining.midi,
+      },
     }
   })
 }
@@ -587,7 +702,7 @@ export function naturalizeNote(
     if (!element) {
       return 'Could not find that note in the score.'
     }
-    updatePitchElement(element, midi)
+    updatePitchElement(element, midi, { step, alter: 0 })
     return {
       xml: serialize(document),
       selection: { ...selection, midi },
