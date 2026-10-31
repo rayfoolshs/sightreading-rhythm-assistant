@@ -106,6 +106,47 @@
   flex: 1;
 }
 
+.workspace > .practice-panel {
+  grid-column: 1 / -1;
+}
+
+.practice-body {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1081px) {
+  .practice-panel .practice-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) repeat(3, minmax(0, 1fr)) minmax(
+        0,
+        1.1fr
+      );
+    gap: 0 22px;
+    align-items: start;
+  }
+
+  .practice-panel .transport {
+    align-items: stretch;
+  }
+
+  .practice-panel .control-block {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .practice-panel .toggle-grid {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .practice-panel .practice-tip {
+    grid-column: 1 / -1;
+  }
+}
+
 .score-column {
   display: flex;
   flex-direction: column;
@@ -1755,8 +1796,7 @@ input[type='range']:disabled {
   }
 
   .side-column {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    display: flex;
   }
 
   .score-viewport {

@@ -1213,6 +1213,30 @@ function App() {
       </header>
 
       <main className={`workspace ${editMode ? 'is-editing' : ''}`}>
+        <Controls
+          playing={playing}
+          bpm={bpm}
+          metronome={metronome}
+          loop={loop}
+          follow={follow}
+          shuffle={shuffle}
+          shuffleAmount={shuffleAmount}
+          volume={volume}
+          muted={muted}
+          onToggle={handleToggle}
+          onRestart={handleRestart}
+          onBpm={changeTempo}
+          onMetronome={changeMetronome}
+          onLoop={(enabled) => {
+            setLoop(enabled)
+            player.setLoop(enabled)
+          }}
+          onFollow={setFollow}
+          onShuffle={setShuffle}
+          onShuffleAmount={setShuffleAmount}
+          onVolume={setVolume}
+          onMute={setMuted}
+        />
         <section className="score-column">
           <div className="score-toolbar">
             {!editMode ? (
@@ -1429,30 +1453,6 @@ function App() {
             onBlank={startBlankStaff}
             onRetryOmr={refreshOmr}
             onClearError={() => setError(null)}
-          />
-          <Controls
-            playing={playing}
-            bpm={bpm}
-            metronome={metronome}
-            loop={loop}
-            follow={follow}
-            shuffle={shuffle}
-            shuffleAmount={shuffleAmount}
-            volume={volume}
-            muted={muted}
-            onToggle={handleToggle}
-            onRestart={handleRestart}
-            onBpm={changeTempo}
-            onMetronome={changeMetronome}
-            onLoop={(enabled) => {
-              setLoop(enabled)
-              player.setLoop(enabled)
-            }}
-            onFollow={setFollow}
-            onShuffle={setShuffle}
-            onShuffleAmount={setShuffleAmount}
-            onVolume={setVolume}
-            onMute={setMuted}
           />
         </aside>
       </main>

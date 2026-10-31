@@ -64,7 +64,8 @@ export function Controls({
         <span className="panel-tag">space to play</span>
       </div>
 
-      <div className="transport">
+      <div className="practice-body">
+        <div className="transport">
         <button
           type="button"
           className={`play-button ${playing ? 'is-playing' : ''}`}
@@ -231,6 +232,7 @@ export function Controls({
         Start slow. Tap the counting syllables with the metronome, then let the
         tempo creep up.
       </p>
+      </div>
     </section>
   )
 }
