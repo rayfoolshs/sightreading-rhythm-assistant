@@ -1192,7 +1192,18 @@ function App() {
             <span>♪</span>
           </div>
           <div>
-            <h1>Sightreading Rhythm Assistant</h1>
+            <h1>
+              Sightreading Rhythm Assistant
+              <a
+                className="version-pill"
+                href="https://github.com/rayfoolshs/sightreading-rhythm-assistant/blob/main/CHANGELOG.md"
+                target="_blank"
+                rel="noreferrer"
+                title="Version history"
+              >
+                v{__APP_VERSION__}
+              </a>
+            </h1>
             <p>Photograph it. Count it. Play it.</p>
             <div className="brand-byline">
               Created by Ray Foo ·{' '}
@@ -1527,16 +1538,6 @@ function App() {
           </a>
         </span>
         <span>Space = play · ← → = nudge · Home = restart</span>
-        <span className="app-version">
-          <a
-            href="https://github.com/rayfoolshs/sightreading-rhythm-assistant/blob/main/CHANGELOG.md"
-            target="_blank"
-            rel="noreferrer"
-            title="Version history"
-          >
-            v{__APP_VERSION__}
-          </a>
-        </span>
       </footer>
     </div>
   )
