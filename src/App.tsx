@@ -1527,6 +1527,16 @@ function App() {
           </a>
         </span>
         <span>Space = play · ← → = nudge · Home = restart</span>
+        <span className="app-version">
+          <a
+            href="https://github.com/rayfoolshs/sightreading-rhythm-assistant/blob/main/CHANGELOG.md"
+            target="_blank"
+            rel="noreferrer"
+            title="Version history"
+          >
+            v{__APP_VERSION__}
+          </a>
+        </span>
       </footer>
     </div>
   )

@@ -8,7 +8,7 @@ Kodály syllables, and a notation editor.
 
 ## Current status
 
-**Feature-complete for v1.1, plus a post-review maintenance pass.** The app
+**Feature-complete for v1.2, plus a post-review maintenance pass.** The app
 builds, lints, and runs locally with the OMR server. The default example is the
 user-provided *Prelude in G Harmonic Minor* (flute + piano, three staves).
 
@@ -40,6 +40,9 @@ user-provided *Prelude in G Harmonic Minor* (flute + piano, three staves).
   the whole chain; chord-member and tied-note deletion; OMR health timeout and
   cache with a re-check path; error boundary; accessibility (live regions, score
   tab order, reduced motion); lazy-loaded OSMD/MIDI chunks.
+- Practice desk moved to the top of the page, full width on wide screens.
+- Version history: `CHANGELOG.md`, README release notes, and the version shown in
+  the app footer.
 - Vitest unit suite (`npm test`) covering counting, spelling, MusicXML edits,
   blank staff, MIDI import, counting-label layout and click geometry.
 

@@ -249,6 +249,16 @@ frame, or try the exported MusicXML route.
 scratch folder defaults to `<project>/.omr-work` to stay inside the shared
 workspace; keep it under your home directory (or set `OMR_WORK_DIR`).
 
+## Version history
+
+Current version: **1.2.0**. See [CHANGELOG.md](CHANGELOG.md) for the full
+release notes.
+
+- **1.2.0** — Practice desk moved to the top of the page; maintenance,
+  accessibility, and build fixes.
+- **1.1.0** — MIDI import with quantization and multi-track splitting.
+- **1.0.0** — First release: OMR, engraving, playback, counting, and editor.
+
 ## Credits
 
 Created by Ray Foo — [www.rayfooproductions.com](https://www.rayfooproductions.com).
