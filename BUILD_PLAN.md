@@ -8,7 +8,7 @@ Kodály syllables, and a notation editor.
 
 ## Current status
 
-**Feature-complete for v1.2, plus a post-review maintenance pass.** The app
+**Feature-complete for v1.2.1, plus a post-review maintenance pass.** The app
 builds, lints, and runs locally with the OMR server. The default example is the
 user-provided *Prelude in G Harmonic Minor* (flute + piano, three staves).
 
@@ -43,6 +43,7 @@ user-provided *Prelude in G Harmonic Minor* (flute + piano, three staves).
 - Practice desk moved to the top of the page, full width on wide screens.
 - Version history: `CHANGELOG.md`, README release notes, and a version badge in
   the app header that links to the changelog.
+- Print button and print stylesheet for sending the score to a printer or PDF.
 - Vitest unit suite (`npm test`) covering counting, spelling, MusicXML edits,
   blank staff, MIDI import, counting-label layout and click geometry.
 

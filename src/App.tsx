@@ -1008,6 +1008,17 @@ function App() {
     scoreRef.current?.scrollToTop()
   }, [player])
 
+  const handlePrint = useCallback(() => {
+    if (typeof window.print !== 'function') {
+      setError(
+        'Printing is not available in this installed web app. Open the site in Safari and use Share → Print.',
+      )
+      return
+    }
+    setError(null)
+    window.print()
+  }, [])
+
   usePlaybackShortcuts({
     editMode,
     player,
@@ -1275,6 +1286,14 @@ function App() {
                   Kodály
                 </button>
                 {staffControls}
+                <button
+                  type="button"
+                  className="toolbar-button"
+                  onClick={handlePrint}
+                  title="Print the score"
+                >
+                  Print
+                </button>
               </div>
             ) : (
               <>

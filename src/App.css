@@ -1906,3 +1906,85 @@ input[type='range']:disabled {
     gap: 4px;
   }
 }
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .app {
+    display: block;
+    min-height: 0;
+  }
+
+  .app-header,
+  .app-footer,
+  .practice-panel,
+  .side-column,
+  .score-toolbar,
+  .count-card,
+  .count-card-placeholder,
+  .notation-palette,
+  .editor-panel,
+  .modal-backdrop,
+  .playhead,
+  .note-count-layer,
+  .note-hit-layer,
+  .score-input-layer,
+  .input-cursor,
+  .score-loading {
+    display: none !important;
+  }
+
+  .workspace,
+  .workspace.is-editing {
+    display: block;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+  }
+
+  .score-column {
+    display: block;
+    gap: 0;
+  }
+
+  .score-card {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .score-shell {
+    display: block;
+  }
+
+  .score-viewport {
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .score-canvas {
+    min-height: 0;
+    padding-bottom: 0;
+  }
+
+  .osmd-host,
+  .osmd-host svg {
+    break-inside: avoid;
+  }
+
+  .osmd-host svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}

@@ -133,6 +133,14 @@ was the chord's base note, the next member is promoted — and deleting a tied
 note clears every tied segment. Changing a chord's note value, and resizing the
 last note in a measure, still need the MusicXML editor.
 
+### Printing the score
+
+Click **Print** in the score toolbar to open the browser print dialog and send
+the engraved score to a printer or save it as a PDF. The print layout hides the
+app chrome and practice controls so only the notation is printed. On iPad, print
+from Safari (Share → Print); installed home-screen web apps may not expose the
+print dialog.
+
 ### Photo tips for better recognition
 
 - One page, one piece, filling the frame, shot straight-on.
@@ -251,9 +259,10 @@ workspace; keep it under your home directory (or set `OMR_WORK_DIR`).
 
 ## Version history
 
-Current version: **1.2.0**. See [CHANGELOG.md](CHANGELOG.md) for the full
+Current version: **1.2.1**. See [CHANGELOG.md](CHANGELOG.md) for the full
 release notes.
 
+- **1.2.1** — Print the score from the toolbar, plus header version badge fixes.
 - **1.2.0** — Practice desk moved to the top of the page; maintenance,
   accessibility, and build fixes.
 - **1.1.0** — MIDI import with quantization and multi-track splitting.

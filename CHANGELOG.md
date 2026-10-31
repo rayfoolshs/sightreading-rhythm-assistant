@@ -3,6 +3,18 @@
 All notable changes to the Sightreading Rhythm Assistant are recorded here.
 The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] — 2026-10-31
+
+### Added
+
+- A **Print** button and print stylesheet that print the engraved score on its
+  own, without the app chrome or practice controls.
+
+### Fixed
+
+- The header version badge now uses its intended small size on desktop and
+  stays in the header rather than the footer.
+
 ## [1.2.0] — 2026-10-31
 
 ### Changed
@@ -51,6 +63,7 @@ The project follows [Semantic Versioning](https://semver.org/).
   editor.
 - Built-in Prelude, 4/4 and 6/8 samples, plus GitHub Pages deployment.
 
+[1.2.1]: https://github.com/rayfoolshs/sightreading-rhythm-assistant/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/rayfoolshs/sightreading-rhythm-assistant/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/rayfoolshs/sightreading-rhythm-assistant/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/rayfoolshs/sightreading-rhythm-assistant/releases/tag/v1.0.0
