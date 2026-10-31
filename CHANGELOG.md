@@ -14,8 +14,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- This changelog, a version history section in the README, and the running
-  version in the app footer.
+- This changelog, a version history section in the README, and a version badge
+  in the app header that links to the changelog.
 - Post-review maintenance pass: key-aware flat/sharp spelling, tied notes that
   sustain across the whole chain, chord-member and tied-note deletion,
   OMR health timeout and re-check, error boundary, accessibility improvements,

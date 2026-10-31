@@ -41,8 +41,8 @@ user-provided *Prelude in G Harmonic Minor* (flute + piano, three staves).
   cache with a re-check path; error boundary; accessibility (live regions, score
   tab order, reduced motion); lazy-loaded OSMD/MIDI chunks.
 - Practice desk moved to the top of the page, full width on wide screens.
-- Version history: `CHANGELOG.md`, README release notes, and the version shown in
-  the app footer.
+- Version history: `CHANGELOG.md`, README release notes, and a version badge in
+  the app header that links to the changelog.
 - Vitest unit suite (`npm test`) covering counting, spelling, MusicXML edits,
   blank staff, MIDI import, counting-label layout and click geometry.
 
